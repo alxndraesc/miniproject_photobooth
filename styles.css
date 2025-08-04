@@ -152,6 +152,7 @@ body {
     height: 100%;
     object-fit: cover;
     display: none;
+    transform: scaleX(-1); /* Mirror the video horizontally */
 }
 
 #video.active {
@@ -282,8 +283,9 @@ body {
 .camera-controls {
     display: flex;
     justify-content: center;
-    gap: 1.5rem;
+    gap: 1rem;
     margin-top: 1.5rem;
+    flex-wrap: wrap;
 }
 
 /* Download Section */
@@ -755,6 +757,24 @@ body {
 
 .btn-secondary:hover:not(:disabled) {
     background: var(--beige-700);
+}
+
+.btn-tertiary {
+    background: var(--sage-100);
+    color: var(--sage-700);
+    border: 2px solid var(--sage-300);
+    font-size: 0.85rem;
+    padding: 0.6rem 1rem;
+}
+
+.btn-tertiary:hover:not(:disabled) {
+    background: var(--sage-200);
+    border-color: var(--sage-400);
+}
+
+.btn-tertiary.active {
+    background: var(--sage-300);
+    color: var(--sage-800);
 }
 
 .btn-download {

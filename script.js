@@ -1,9 +1,12 @@
 // Photobooth App JavaScript
 class PhotoboothApp {
     constructor() {
+        console.log('🚀 Initializing PhotoboothApp...');
+        
+        console.log('🔧 Getting DOM elements...');
         this.video = document.getElementById('video');
         this.canvas = document.getElementById('canvas');
-        this.ctx = this.canvas.getContext('2d');
+        this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
         this.stream = null;
         this.currentFilter = 'none';
         this.currentFrame = 'strip';
@@ -13,15 +16,126 @@ class PhotoboothApp {
         this.isCapturingMultiShot = false;
         this.currentFrameColor = '#ffffff'; // Default white color for frames
         this.cameraInactivityTimer = null; // For auto-stopping camera
+        this.mirrorCamera = true; // Mirror camera preview for natural feel
         
+        // Initialize device info immediately
+        this.deviceInfo = null;
+        this.detectDeviceType();
+        
+        // Debug element availability
+        console.log('DOM elements found:', {
+            video: !!this.video,
+            canvas: !!this.canvas,
+            context: !!this.ctx,
+            startButton: !!document.getElementById('start-camera'),
+            captureButton: !!document.getElementById('capture-photo'),
+            downloadButton: !!document.getElementById('download-photo')
+        });
+        
+        if (!this.video) {
+            console.error('❌ Video element not found');
+        }
+        
+        if (!this.canvas) {
+            console.error('❌ Canvas element not found');
+        }
+        
+        if (!this.ctx) {
+            console.error('❌ Canvas context not available');
+        }
+        
+        console.log('🎯 Starting initialization...');
         this.init();
     }
 
     init() {
+        console.log('🎛️ Setting up event listeners...');
         this.bindEvents();
+        
+        console.log('🗑️ Clearing photos for privacy...');
         this.clearPhotosOnPageLoad(); // Clear photos for privacy on each page load
+        
+        console.log('🖼️ Loading custom frames...');
         this.loadCustomFrames();
+        
+        console.log('⌨️ Initializing typing animation...');
         this.initTypingAnimation();
+        
+        console.log('🪞 Initializing mirror button...');
+        this.initMirrorButton();
+        
+        console.log('✅ App initialization complete');
+    }
+
+    detectDeviceType() {
+        // Detect if we're on mobile or desktop for better camera handling
+        const userAgent = navigator.userAgent;
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+        const isTablet = /iPad|Android(?=.*Tablet)/i.test(userAgent);
+        
+        this.deviceInfo = {
+            isMobile,
+            isTablet,
+            isDesktop: !isMobile && !isTablet
+        };
+        
+        console.log('Device detected:', this.deviceInfo);
+    }
+
+    initMirrorButton() {
+        const mirrorBtn = document.getElementById('mirror-toggle');
+        if (this.mirrorCamera) {
+            mirrorBtn.classList.add('active');
+            mirrorBtn.textContent = '🪞 MIRROR ON';
+        } else {
+            mirrorBtn.classList.remove('active');
+            mirrorBtn.textContent = '🪞 MIRROR OFF';
+        }
+    }
+
+    getCameraConstraints() {
+        // Ensure deviceInfo is available, detect if not
+        if (!this.deviceInfo) {
+            console.warn('⚠️ Device info not available, detecting now...');
+            this.detectDeviceType();
+        }
+        
+        // Provide different camera constraints based on device type
+        const baseConstraints = {
+            video: {
+                facingMode: 'user',
+                frameRate: { ideal: 30, max: 60 }
+            },
+            audio: false
+        };
+
+        if (this.deviceInfo && this.deviceInfo.isMobile) {
+            // Mobile devices - prioritize compatibility
+            baseConstraints.video = {
+                ...baseConstraints.video,
+                width: { ideal: 1280, min: 640, max: 1920 },
+                height: { ideal: 720, min: 480, max: 1080 },
+                aspectRatio: { ideal: 16/9 }
+            };
+        } else if (this.deviceInfo && this.deviceInfo.isTablet) {
+            // Tablets - higher quality but still mobile-optimized
+            baseConstraints.video = {
+                ...baseConstraints.video,
+                width: { ideal: 1920, min: 1280, max: 2560 },
+                height: { ideal: 1080, min: 720, max: 1440 },
+                aspectRatio: { ideal: 16/9 }
+            };
+        } else {
+            // Desktop/Laptop - highest quality
+            baseConstraints.video = {
+                ...baseConstraints.video,
+                width: { ideal: 1920, min: 1280, max: 3840 },
+                height: { ideal: 1080, min: 720, max: 2160 },
+                aspectRatio: { ideal: 16/9 }
+            };
+        }
+
+        return baseConstraints;
     }
 
     bindEvents() {
@@ -39,6 +153,9 @@ class PhotoboothApp {
             this.resetCameraInactivityTimer(); // Reset timer on capture
         });
         document.getElementById('download-photo').addEventListener('click', () => this.downloadLatestPhoto());
+
+        // Mirror toggle button
+        document.getElementById('mirror-toggle').addEventListener('click', () => this.toggleCameraMirror());
 
         // Filter buttons
         document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -70,7 +187,12 @@ class PhotoboothApp {
     }
 
     initTypingAnimation() {
-        const titleElement = document.getElementById('typing-title');
+        const titleElement = document.querySelector('.title');
+        if (!titleElement) {
+            console.warn('Title element not found');
+            return;
+        }
+        
         const text = 'PHOTOBOOTH';
         let index = 0;
         
@@ -154,29 +276,95 @@ class PhotoboothApp {
 
     // Enhanced camera management with privacy features
     async startCamera() {
+        console.log('🔍 Starting camera initialization...');
+        
         const startBtn = document.getElementById('start-camera');
         const captureBtn = document.getElementById('capture-photo');
         const placeholder = document.getElementById('camera-placeholder');
+        
+        // Debug element availability
+        console.log('Elements found:', {
+            startBtn: !!startBtn,
+            captureBtn: !!captureBtn,
+            placeholder: !!placeholder,
+            video: !!this.video
+        });
+        
+        if (!startBtn || !captureBtn || !placeholder || !this.video) {
+            console.error('❌ Missing required elements for camera initialization');
+            this.showToast('Initialization Error', 'Missing page elements. Please refresh the page.', 'error');
+            return;
+        }
         
         this.showLoading('STARTING CAMERA...');
         startBtn.disabled = true;
 
         try {
-            this.stream = await navigator.mediaDevices.getUserMedia({
-                video: { 
-                    width: { ideal: 1280 }, 
-                    height: { ideal: 720 },
-                    facingMode: 'user'
-                },
-                audio: false
-            });
+            // Check if getUserMedia is available
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error('getUserMedia is not supported in this browser');
+            }
+            
+            console.log('📱 Browser supports getUserMedia');
+            
+            // Get device-appropriate camera constraints
+            const constraints = this.getCameraConstraints();
+            console.log('🎥 Using camera constraints:', constraints);
+            
+            try {
+                console.log('📞 Requesting camera access with ideal constraints...');
+                this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+                console.log('✅ Camera access granted with ideal constraints');
+            } catch (constraintError) {
+                console.warn('⚠️ Ideal constraints failed, trying fallback:', constraintError);
+                // Fallback to basic constraints
+                const fallbackConstraints = {
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    },
+                    audio: false
+                };
+                console.log('🔄 Trying fallback constraints:', fallbackConstraints);
+                this.stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+                console.log('✅ Camera access granted with fallback constraints');
+            }
 
+            console.log('🎬 Setting video source...');
             this.video.srcObject = this.stream;
+            
+            // Wait for video to be ready
+            await new Promise((resolve, reject) => {
+                this.video.onloadedmetadata = () => {
+                    console.log('📺 Video metadata loaded');
+                    resolve();
+                };
+                this.video.onerror = (error) => {
+                    console.error('❌ Video error:', error);
+                    reject(error);
+                };
+                
+                // Timeout after 10 seconds
+                setTimeout(() => {
+                    reject(new Error('Video loading timeout'));
+                }, 10000);
+            });
+            
             this.video.classList.add('active');
             placeholder.classList.add('hidden');
             
+            // Log camera info for debugging
+            const videoTrack = this.stream.getVideoTracks()[0];
+            const settings = videoTrack.getSettings();
+            console.log('📊 Camera Settings:', settings);
+            console.log('🔧 Device Type:', this.deviceInfo);
+            
             // Show privacy indicator
-            document.getElementById('privacy-indicator').classList.remove('hidden');
+            const privacyIndicator = document.getElementById('privacy-indicator');
+            if (privacyIndicator) {
+                privacyIndicator.classList.remove('hidden');
+            }
             
             startBtn.textContent = 'STOP CAMERA';
             startBtn.classList.add('btn-success');
@@ -186,9 +374,28 @@ class PhotoboothApp {
             
             // Start inactivity timer - auto-stop camera after 5 minutes of no interaction
             this.startCameraInactivityTimer();
+            
+            console.log('🎉 Camera initialization complete');
         } catch (error) {
-            console.error('Camera access error:', error);
-            this.showToast('Camera Error', 'Unable to access camera. Please check permissions and try again.', 'error');
+            console.error('❌ Camera access error:', error);
+            console.error('Error details:', {
+                name: error.name,
+                message: error.message,
+                constraint: error.constraint
+            });
+            
+            let errorMessage = 'Unable to access camera. ';
+            if (error.name === 'NotAllowedError') {
+                errorMessage += 'Please allow camera permissions and try again.';
+            } else if (error.name === 'NotFoundError') {
+                errorMessage += 'No camera found on this device.';
+            } else if (error.name === 'NotReadableError') {
+                errorMessage += 'Camera is being used by another application.';
+            } else {
+                errorMessage += 'Please check permissions and try again.';
+            }
+            
+            this.showToast('Camera Error', errorMessage, 'error');
             startBtn.disabled = false;
         } finally {
             this.hideLoading();
@@ -224,6 +431,24 @@ class PhotoboothApp {
         button.classList.add('active');
         
         this.currentFrameColor = button.dataset.color;
+    }
+
+    toggleCameraMirror() {
+        this.mirrorCamera = !this.mirrorCamera;
+        const video = document.getElementById('video');
+        const mirrorBtn = document.getElementById('mirror-toggle');
+        
+        if (this.mirrorCamera) {
+            video.style.transform = 'scaleX(-1)';
+            mirrorBtn.classList.add('active');
+            mirrorBtn.textContent = '🪞 MIRROR ON';
+        } else {
+            video.style.transform = 'scaleX(1)';
+            mirrorBtn.classList.remove('active');
+            mirrorBtn.textContent = '🪞 MIRROR OFF';
+        }
+        
+        this.showToast('Mirror Toggle', `Camera mirror ${this.mirrorCamera ? 'enabled' : 'disabled'}`, 'info');
     }
 
     clearPhotosOnPageLoad() {
@@ -285,8 +510,36 @@ class PhotoboothApp {
             // Clear canvas first
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-            // Draw the video frame to canvas
-            this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+            // Draw the video frame to canvas with proper aspect ratio preservation
+            // Note: Video is mirrored in CSS for user comfort, so we need to un-mirror it here
+            const videoAspectRatio = this.video.videoWidth / this.video.videoHeight;
+            const canvasAspectRatio = this.canvas.width / this.canvas.height;
+            
+            let drawWidth, drawHeight, drawX, drawY;
+            
+            if (videoAspectRatio > canvasAspectRatio) {
+                // Video is wider - fit by height, center horizontally
+                drawHeight = this.canvas.height;
+                drawWidth = drawHeight * videoAspectRatio;
+                drawX = (this.canvas.width - drawWidth) / 2;
+                drawY = 0;
+            } else {
+                // Video is taller - fit by width, center vertically
+                drawWidth = this.canvas.width;
+                drawHeight = drawWidth / videoAspectRatio;
+                drawX = 0;
+                drawY = (this.canvas.height - drawHeight) / 2;
+            }
+            
+            // Save context and apply horizontal flip to un-mirror if camera is mirrored
+            this.ctx.save();
+            if (this.mirrorCamera) {
+                this.ctx.scale(-1, 1); // Flip horizontally to un-mirror
+                this.ctx.drawImage(this.video, -drawX - drawWidth, drawY, drawWidth, drawHeight);
+            } else {
+                this.ctx.drawImage(this.video, drawX, drawY, drawWidth, drawHeight);
+            }
+            this.ctx.restore();
 
             // Apply filter
             this.applyFilter(this.currentFilter);
@@ -400,8 +653,15 @@ class PhotoboothApp {
                 tempCanvas.height = this.video.videoHeight;
                 const tempCtx = tempCanvas.getContext('2d');
 
-                // Draw video frame
-                tempCtx.drawImage(this.video, 0, 0, tempCanvas.width, tempCanvas.height);
+                // Draw video frame (un-mirror if camera is mirrored)
+                tempCtx.save();
+                if (this.mirrorCamera) {
+                    tempCtx.scale(-1, 1); // Flip horizontally to un-mirror
+                    tempCtx.drawImage(this.video, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height);
+                } else {
+                    tempCtx.drawImage(this.video, 0, 0, tempCanvas.width, tempCanvas.height);
+                }
+                tempCtx.restore();
 
                 // Apply filter to temp canvas
                 const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
@@ -674,8 +934,28 @@ class PhotoboothApp {
             this.ctx.fillStyle = 'rgba(0,0,0,0.3)';
             this.ctx.fillRect(photoX - 4, y - 4, photoWidth + 8, photoHeight + 8);
             
-            // Draw the actual photo
-            this.ctx.drawImage(img, photoX, y, photoWidth, photoHeight);
+            // Calculate aspect ratio preservation for the photo
+            const imgAspectRatio = img.width / img.height;
+            const frameAspectRatio = photoWidth / photoHeight;
+            
+            let drawWidth, drawHeight, drawX, drawY;
+            
+            if (imgAspectRatio > frameAspectRatio) {
+                // Image is wider - fit by height, center horizontally
+                drawHeight = photoHeight;
+                drawWidth = drawHeight * imgAspectRatio;
+                drawX = photoX + (photoWidth - drawWidth) / 2;
+                drawY = y;
+            } else {
+                // Image is taller - fit by width, center vertically
+                drawWidth = photoWidth;
+                drawHeight = drawWidth / imgAspectRatio;
+                drawX = photoX;
+                drawY = y + (photoHeight - drawHeight) / 2;
+            }
+            
+            // Draw the actual photo with proper aspect ratio
+            this.ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
         });
 
         // Add film strip branding at bottom
