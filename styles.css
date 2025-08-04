@@ -77,6 +77,13 @@ body {
     letter-spacing: 0.2em;
     margin-bottom: 0.5rem;
     text-shadow: 2px 2px 0px var(--sage-100);
+    display: inline-block;
+    animation: cursorBlink 1s infinite;
+}
+
+@keyframes cursorBlink {
+    0%, 50% { border-right-color: var(--sage-600); }
+    51%, 100% { border-right-color: transparent; }
 }
 
 .subtitle {
@@ -229,6 +236,46 @@ body {
     border-left: none;
     border-top: none;
     border-radius: 0 0 0.5rem 0;
+}
+
+/* Privacy Indicator */
+.privacy-indicator {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: rgba(220, 38, 38, 0.9);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    z-index: 10;
+    animation: pulsePrivacy 2s infinite;
+}
+
+.privacy-indicator.hidden {
+    display: none;
+}
+
+.privacy-dot {
+    width: 8px;
+    height: 8px;
+    background: #ff4444;
+    border-radius: 50%;
+    animation: privacyBlink 1s infinite;
+}
+
+@keyframes pulsePrivacy {
+    0%, 100% { opacity: 0.9; }
+    50% { opacity: 0.7; }
+}
+
+@keyframes privacyBlink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
 }
 
 /* Camera Controls */
@@ -727,6 +774,18 @@ body {
     font-size: 0.75rem;
     color: var(--sage-500);
     margin-top: 0.5rem;
+}
+
+.privacy-note {
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--sage-600);
+    margin-top: 0.25rem;
+    font-weight: 600;
+    background: var(--sage-50);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    border: 1px solid var(--sage-200);
 }
 
 /* Gallery Section */

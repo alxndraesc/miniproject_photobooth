@@ -12,39 +12,147 @@ class PhotoboothApp {
         this.multiShotPhotos = []; // For film strip multiple shots
         this.isCapturingMultiShot = false;
         this.currentFrameColor = '#ffffff'; // Default white color for frames
+        this.cameraInactivityTimer = null; // For auto-stopping camera
         
         this.init();
     }
 
     init() {
         this.bindEvents();
-        this.loadPhotosFromStorage();
+        this.clearPhotosOnPageLoad(); // Clear photos for privacy on each page load
         this.loadCustomFrames();
-        this.startPhotoExpirationCheck();
+        this.initTypingAnimation();
     }
 
     bindEvents() {
-        // Camera controls
-        document.getElementById('start-camera').addEventListener('click', () => this.startCamera());
-        document.getElementById('capture-photo').addEventListener('click', () => this.capturePhoto());
+        // Camera controls with enhanced privacy
+        document.getElementById('start-camera').addEventListener('click', () => {
+            const startBtn = document.getElementById('start-camera');
+            if (startBtn.textContent === 'START CAMERA') {
+                this.startCamera();
+            } else {
+                this.stopCamera();
+            }
+        });
+        document.getElementById('capture-photo').addEventListener('click', () => {
+            this.capturePhoto();
+            this.resetCameraInactivityTimer(); // Reset timer on capture
+        });
         document.getElementById('download-photo').addEventListener('click', () => this.downloadLatestPhoto());
 
         // Filter buttons
         document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.selectFilter(e.target.closest('.filter-btn')));
+            btn.addEventListener('click', (e) => {
+                this.selectFilter(e.target.closest('.filter-btn'));
+                this.resetCameraInactivityTimer(); // Reset timer on filter change
+            });
         });
 
         // Frame buttons
         document.querySelectorAll('.frame-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.selectFrame(e.target.closest('.frame-btn')));
+            btn.addEventListener('click', (e) => {
+                this.selectFrame(e.target.closest('.frame-btn'));
+                this.resetCameraInactivityTimer(); // Reset timer on frame change
+            });
         });
 
         // Frame color buttons
         document.querySelectorAll('.color-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.selectFrameColor(e.target.closest('.color-btn')));
+            btn.addEventListener('click', (e) => {
+                this.selectFrameColor(e.target.closest('.color-btn'));
+                this.resetCameraInactivityTimer(); // Reset timer on user interaction
+            });
         });
+
+        // Add interaction listeners to reset camera timer
+        document.addEventListener('click', () => this.resetCameraInactivityTimer());
+        document.addEventListener('keydown', () => this.resetCameraInactivityTimer());
     }
 
+    initTypingAnimation() {
+        const titleElement = document.getElementById('typing-title');
+        const text = 'PHOTOBOOTH';
+        let index = 0;
+        
+        // Add cursor styling
+        titleElement.style.borderRight = '3px solid var(--sage-600)';
+        titleElement.style.paddingRight = '5px';
+        
+        function typeCharacter() {
+            if (index < text.length) {
+                titleElement.textContent = text.slice(0, index + 1);
+                index++;
+                setTimeout(typeCharacter, 150); // 150ms between each character
+            } else {
+                // Remove cursor after typing is complete
+                setTimeout(() => {
+                    titleElement.style.borderRight = 'none';
+                    titleElement.style.paddingRight = '0';
+                }, 1000);
+            }
+        }
+        
+        // Start typing after a brief delay
+        setTimeout(typeCharacter, 500);
+    }
+
+    stopCamera() {
+        if (this.stream) {
+            // Clear inactivity timer
+            if (this.cameraInactivityTimer) {
+                clearTimeout(this.cameraInactivityTimer);
+                this.cameraInactivityTimer = null;
+            }
+            
+            // Stop all video tracks to completely disable camera access
+            this.stream.getTracks().forEach(track => {
+                track.stop();
+                console.log('Camera track stopped for privacy');
+            });
+            
+            // Clear the video source
+            this.video.srcObject = null;
+            this.stream = null;
+            
+            // Update UI
+            this.video.classList.remove('active');
+            document.getElementById('camera-placeholder').classList.remove('hidden');
+            
+            // Hide privacy indicator
+            document.getElementById('privacy-indicator').classList.add('hidden');
+            
+            const startBtn = document.getElementById('start-camera');
+            const captureBtn = document.getElementById('capture-photo');
+            
+            startBtn.textContent = 'START CAMERA';
+            startBtn.classList.remove('btn-success');
+            startBtn.disabled = false;
+            captureBtn.disabled = true;
+            
+            this.showToast('Camera Stopped', 'Camera access has been completely disabled for your privacy.', 'success');
+        }
+    }
+
+    startCameraInactivityTimer() {
+        // Clear any existing timer
+        if (this.cameraInactivityTimer) {
+            clearTimeout(this.cameraInactivityTimer);
+        }
+        
+        // Set timer for 5 minutes (300,000 ms)
+        this.cameraInactivityTimer = setTimeout(() => {
+            this.stopCamera();
+            this.showToast('Camera Auto-Stopped', 'Camera was automatically disabled after 5 minutes of inactivity for privacy.', 'info');
+        }, 300000);
+    }
+
+    resetCameraInactivityTimer() {
+        if (this.stream && this.cameraInactivityTimer) {
+            this.startCameraInactivityTimer();
+        }
+    }
+
+    // Enhanced camera management with privacy features
     async startCamera() {
         const startBtn = document.getElementById('start-camera');
         const captureBtn = document.getElementById('capture-photo');
@@ -67,11 +175,17 @@ class PhotoboothApp {
             this.video.classList.add('active');
             placeholder.classList.add('hidden');
             
-            startBtn.textContent = 'CAMERA ON';
+            // Show privacy indicator
+            document.getElementById('privacy-indicator').classList.remove('hidden');
+            
+            startBtn.textContent = 'STOP CAMERA';
             startBtn.classList.add('btn-success');
             captureBtn.disabled = false;
 
-            this.showToast('Camera Started', 'Ready to capture photos!', 'success');
+            this.showToast('Camera Started', 'Camera is active. Click "STOP CAMERA" to disable for privacy.', 'success');
+            
+            // Start inactivity timer - auto-stop camera after 5 minutes of no interaction
+            this.startCameraInactivityTimer();
         } catch (error) {
             console.error('Camera access error:', error);
             this.showToast('Camera Error', 'Unable to access camera. Please check permissions and try again.', 'error');
@@ -112,41 +226,19 @@ class PhotoboothApp {
         this.currentFrameColor = button.dataset.color;
     }
 
-    startPhotoExpirationCheck() {
-        // Check for expired photos every 5 minutes
-        setInterval(() => {
-            this.checkAndRemoveExpiredPhotos();
-        }, 5 * 60 * 1000); // 5 minutes
-        
-        // Also check on startup
-        this.checkAndRemoveExpiredPhotos();
-    }
-
-    checkAndRemoveExpiredPhotos() {
-        const oneHourInMs = 60 * 60 * 1000; // 1 hour in milliseconds
-        const now = Date.now();
-        
-        const initialCount = this.capturedPhotos.length;
-        
-        // Filter out photos older than 1 hour
-        this.capturedPhotos = this.capturedPhotos.filter(photo => {
-            return (now - photo.timestamp) < oneHourInMs;
-        });
-        
-        // If photos were removed, update storage and preview
-        if (this.capturedPhotos.length < initialCount) {
-            this.savePhotosToStorage();
-            
-            // Update preview - show latest photo if available, otherwise clear
-            if (this.capturedPhotos.length > 0) {
-                this.updatePhotoPreview(this.capturedPhotos[0]);
-            } else {
-                this.clearPhotoPreview();
-                document.getElementById('download-photo').disabled = true;
-            }
-            
-            console.log(`Removed ${initialCount - this.capturedPhotos.length} expired photos for privacy`);
+    clearPhotosOnPageLoad() {
+        // Clear all stored photos for privacy on each page load/refresh
+        try {
+            localStorage.removeItem('photobooth-photos');
+            console.log('Photos cleared for privacy on page load');
+        } catch (error) {
+            console.warn('Failed to clear photos:', error);
         }
+        
+        // Ensure empty state
+        this.capturedPhotos = [];
+        this.clearPhotoPreview();
+        document.getElementById('download-photo').disabled = true;
     }
 
     clearPhotoPreview() {
@@ -241,7 +333,7 @@ class PhotoboothApp {
                 downloadBtn.disabled = false;
             }
 
-            this.showToast('Photo Captured!', 'Your photo has been processed and is ready to download.', 'success');
+            this.showToast('Photo Captured!', 'Your photo is ready to download. Photos are cleared when page is refreshed for privacy.', 'success');
             
         } catch (error) {
             console.error('Photo capture error:', error);
@@ -609,7 +701,7 @@ class PhotoboothApp {
             downloadBtn.disabled = false;
         }
 
-        this.showToast('Film Strip Created!', 'Your authentic 4-shot film strip is ready!', 'success');
+        this.showToast('Film Strip Created!', 'Your authentic 4-shot film strip is ready! Photos clear on page refresh for privacy.', 'success');
     }
 
     addFilmPerforations() {
@@ -915,58 +1007,16 @@ class PhotoboothApp {
     }
 
     savePhotosToStorage() {
+        // Note: Photos are now session-only for privacy
+        // They will be cleared on page reload/refresh
+        // This method is kept for potential temporary storage during the session
         try {
-            // Only save the latest 5 photos to prevent storage overflow and reduce memory usage
-            const photosToSave = this.capturedPhotos.slice(0, 5);
-            
-            // Check if localStorage is available
-            if (typeof(Storage) === "undefined") {
-                console.warn('localStorage not supported');
-                return;
-            }
-            
-            const serializedPhotos = JSON.stringify(photosToSave);
-            
-            // Check storage size (rough estimate)
-            if (serializedPhotos.length > 10 * 1024 * 1024) { // 10MB limit
-                console.warn('Photos too large for localStorage, reducing count');
-                const smallerSet = this.capturedPhotos.slice(0, 2);
-                localStorage.setItem('photobooth-photos', JSON.stringify(smallerSet));
-            } else {
-                localStorage.setItem('photobooth-photos', serializedPhotos);
-            }
-            
-        } catch (error) {
-            if (error.name === 'QuotaExceededError') {
-                console.warn('localStorage quota exceeded, clearing old photos');
-                try {
-                    // Try to save just the latest photo
-                    const latestOnly = this.capturedPhotos.slice(0, 1);
-                    localStorage.setItem('photobooth-photos', JSON.stringify(latestOnly));
-                } catch (retryError) {
-                    console.warn('Still cannot save to localStorage:', retryError);
-                    localStorage.removeItem('photobooth-photos');
-                }
-            } else {
-                console.warn('Failed to save photos to localStorage:', error);
-            }
-        }
-    }
-
-    loadPhotosFromStorage() {
-        try {
-            const savedPhotos = localStorage.getItem('photobooth-photos');
-            if (savedPhotos) {
-                this.capturedPhotos = JSON.parse(savedPhotos);
-                
-                // Update preview with latest photo
-                if (this.capturedPhotos.length > 0) {
-                    this.updatePhotoPreview(this.capturedPhotos[0]);
-                    document.getElementById('download-photo').disabled = false;
-                }
+            if (typeof(Storage) !== "undefined") {
+                // Only keep photos in memory, don't persist to localStorage
+                console.log('Photos stored in session memory only (will clear on page reload)');
             }
         } catch (error) {
-            console.warn('Failed to load photos from localStorage:', error);
+            console.warn('Storage operation failed:', error);
         }
     }
 
@@ -1007,6 +1057,13 @@ class PhotoboothApp {
 
     // Cleanup method
     destroy() {
+        // Clear inactivity timer
+        if (this.cameraInactivityTimer) {
+            clearTimeout(this.cameraInactivityTimer);
+            this.cameraInactivityTimer = null;
+        }
+        
+        // Stop camera stream
         if (this.stream) {
             this.stream.getTracks().forEach(track => track.stop());
         }
