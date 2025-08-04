@@ -1,0 +1,26 @@
+[
+  {
+    "id": "vintage-border",
+    "name": "VINTAGE",
+    "filename": "vintage-border.png",
+    "description": "Classic vintage border"
+  },
+  {
+    "id": "golden-frame",
+    "name": "GOLDEN",
+    "filename": "golden-frame.png",
+    "description": "Elegant golden frame"
+  },
+  {
+    "id": "film-strip",
+    "name": "FILM",
+    "filename": "film-strip.png",
+    "description": "Classic film strip style"
+  },
+  {
+    "id": "christmas-frame",
+    "name": "XMAS",
+    "filename": "christmas-frame.png",
+    "description": "Festive Christmas frame"
+  }
+]

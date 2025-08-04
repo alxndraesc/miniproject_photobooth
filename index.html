@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photobooth - Capture Memories with Style</title>
+    <meta name="description" content="A nostalgic photobooth app with vintage filters and frame styles. Capture, edit, and download your photos with classic aesthetic.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <h1 class="title">PHOTOBOOTH</h1>
+            <p class="subtitle">[ by alxndrae ]</p>
+            <div class="title-divider"></div>
+        </header>
+
+        <br>
+
+        <div class="container">
+            <!-- Main Interface -->
+            <div class="main-grid">
+                
+                <!-- Camera Preview Section -->
+                <div class="camera-section">
+                    <div class="camera-frame">
+                        <div class="camera-preview">
+                            <!-- Video Element -->
+                            <video id="video" autoplay muted playsinline></video>
+                            
+                            <!-- Camera Placeholder -->
+                            <div id="camera-placeholder" class="camera-placeholder">
+                                <div class="placeholder-content">
+                                    <p class="placeholder-title">CAMERA READY</p>
+                                    <p class="placeholder-subtitle">Click "Start Camera" to begin</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Camera overlay frame -->
+                            <div class="camera-overlay">
+                                <div class="corner corner-tl"></div>
+                                <div class="corner corner-tr"></div>
+                                <div class="corner corner-bl"></div>
+                                <div class="corner corner-br"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Camera Controls -->
+                        <div class="camera-controls">
+                            <button id="start-camera" class="btn btn-primary">START CAMERA</button>
+                            <button id="capture-photo" class="btn btn-secondary" disabled>📸 CAPTURE</button>
+                        </div>
+                        
+                        <!-- Download Section -->
+                        <div class="download-section">
+                            <button id="download-photo" class="btn btn-download" disabled>
+                                💾 DOWNLOAD PHOTO
+                            </button>
+                            <p class="download-note">Photos save directly to your device</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controls Panel -->
+                <div class="controls-panel">
+                    
+                    <!-- Filter Presets -->
+                    <div class="control-section">
+                        <h3 class="section-title">[ FILM PRESETS ]</h3>
+                        <div class="filter-grid">
+                            <button class="filter-btn active" data-filter="none">
+                                <div class="filter-name">ORIGINAL</div>
+                                <div class="filter-desc">No filter</div>
+                            </button>
+                            <button class="filter-btn" data-filter="monomuse">
+                                <div class="filter-name">MONOMUSE</div>
+                                <div class="filter-desc">Artistic grayscale</div>
+                            </button>
+                            <button class="filter-btn" data-filter="retrograde">
+                                <div class="filter-name">RETROGRADE</div>
+                                <div class="filter-desc">Vintage warmth</div>
+                            </button>
+                            <button class="filter-btn" data-filter="vivapop">
+                                <div class="filter-name">VIVAPOP</div>
+                                <div class="filter-desc">Vibrant colors</div>
+                            </button>
+                            <button class="filter-btn" data-filter="solshine">
+                                <div class="filter-name">SOLSHINE</div>
+                                <div class="filter-desc">Bright & sunny</div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Frame Layouts -->
+                    <div class="control-section">
+                        <h3 class="section-title">[ FRAME STYLES ]</h3>
+                        <div class="frame-grid">
+                            <button class="frame-btn active" data-frame="strip">
+                                <div class="frame-preview strip-preview"></div>
+                                <div class="frame-name">STRIP</div>
+                            </button>
+                            <button class="frame-btn" data-frame="collage">
+                                <div class="frame-preview collage-preview"></div>
+                                <div class="frame-name">COLLAGE</div>
+                            </button>
+                            <button class="frame-btn" data-frame="polaroid">
+                                <div class="frame-preview polaroid-preview"></div>
+                                <div class="frame-name">POLAROID</div>
+                            </button>
+                        </div>
+                        
+                        <!-- Frame Color Options -->
+                        <div class="frame-colors-section">
+                            <h4 class="color-section-title">[ FRAME COLORS ]</h4>
+                            <div class="color-grid">
+                                <button class="color-btn active" data-color="#ffffff" style="background-color: #ffffff;">
+                                    <span class="color-name">WHITE</span>
+                                </button>
+                                <button class="color-btn" data-color="#f5f1e8" style="background-color: #f5f1e8;">
+                                    <span class="color-name">CREAM</span>
+                                </button>
+                                <button class="color-btn" data-color="#2a2a2a" style="background-color: #2a2a2a;">
+                                    <span class="color-name">BLACK</span>
+                                </button>
+                                <button class="color-btn" data-color="#d4c4a8" style="background-color: #d4c4a8;">
+                                    <span class="color-name">BEIGE</span>
+                                </button>
+                                <button class="color-btn" data-color="#6d9650" style="background-color: #6d9650;">
+                                    <span class="color-name">SAGE</span>
+                                </button>
+                                <button class="color-btn" data-color="#c19b7a" style="background-color: #c19b7a;">
+                                    <span class="color-name">MOCHA</span>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Custom Frames Section -->
+                        <div class="custom-frames-section">
+                            <div class="custom-frames-header">
+                                <h4 class="custom-frames-title">[ CUSTOM FRAMES ]</h4>
+                            </div>
+                            <div id="custom-frames-grid" class="custom-frames-grid">
+                                <!-- Custom frames will be loaded from frames folder -->
+                            </div>
+                        </div>
+                        </div>
+
+                    </div>
+
+                </div>
+            </div>            <!-- Photo Preview Section -->
+            <div class="photo-preview-section">
+                <div class="preview-header">
+                    <h3 class="section-title">[ LATEST PHOTO ]</h3>
+                </div>
+                <div id="photo-preview" class="photo-preview">
+                    <div class="preview-placeholder">
+                        <div class="placeholder-icon">📷</div>
+                        <p>No photo taken yet</p>
+                    </div>
+                </div>
+            </div>
+
+        <!-- Loading Overlay -->
+        <div id="loading-overlay" class="loading-overlay hidden">
+            <div class="loading-content">
+                <div class="loading-icon">📸</div>
+                <p id="loading-text" class="loading-text">STARTING CAMERA...</p>
+                <div class="loading-bar"></div>
+            </div>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div id="toast-container" class="toast-container"></div>
+
+        <!-- Hidden Canvas for Photo Processing -->
+        <canvas id="canvas" style="display: none;"></canvas>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

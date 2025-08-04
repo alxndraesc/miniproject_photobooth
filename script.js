@@ -1,0 +1,1026 @@
+// Photobooth App JavaScript
+class PhotoboothApp {
+    constructor() {
+        this.video = document.getElementById('video');
+        this.canvas = document.getElementById('canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.stream = null;
+        this.currentFilter = 'none';
+        this.currentFrame = 'strip';
+        this.capturedPhotos = [];
+        this.customFrames = [];
+        this.multiShotPhotos = []; // For film strip multiple shots
+        this.isCapturingMultiShot = false;
+        this.currentFrameColor = '#ffffff'; // Default white color for frames
+        
+        this.init();
+    }
+
+    init() {
+        this.bindEvents();
+        this.loadPhotosFromStorage();
+        this.loadCustomFrames();
+        this.startPhotoExpirationCheck();
+    }
+
+    bindEvents() {
+        // Camera controls
+        document.getElementById('start-camera').addEventListener('click', () => this.startCamera());
+        document.getElementById('capture-photo').addEventListener('click', () => this.capturePhoto());
+        document.getElementById('download-photo').addEventListener('click', () => this.downloadLatestPhoto());
+
+        // Filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.selectFilter(e.target.closest('.filter-btn')));
+        });
+
+        // Frame buttons
+        document.querySelectorAll('.frame-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.selectFrame(e.target.closest('.frame-btn')));
+        });
+
+        // Frame color buttons
+        document.querySelectorAll('.color-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.selectFrameColor(e.target.closest('.color-btn')));
+        });
+    }
+
+    async startCamera() {
+        const startBtn = document.getElementById('start-camera');
+        const captureBtn = document.getElementById('capture-photo');
+        const placeholder = document.getElementById('camera-placeholder');
+        
+        this.showLoading('STARTING CAMERA...');
+        startBtn.disabled = true;
+
+        try {
+            this.stream = await navigator.mediaDevices.getUserMedia({
+                video: { 
+                    width: { ideal: 1280 }, 
+                    height: { ideal: 720 },
+                    facingMode: 'user'
+                },
+                audio: false
+            });
+
+            this.video.srcObject = this.stream;
+            this.video.classList.add('active');
+            placeholder.classList.add('hidden');
+            
+            startBtn.textContent = 'CAMERA ON';
+            startBtn.classList.add('btn-success');
+            captureBtn.disabled = false;
+
+            this.showToast('Camera Started', 'Ready to capture photos!', 'success');
+        } catch (error) {
+            console.error('Camera access error:', error);
+            this.showToast('Camera Error', 'Unable to access camera. Please check permissions and try again.', 'error');
+            startBtn.disabled = false;
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    selectFilter(button) {
+        // Remove active class from all filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+        button.classList.add('active');
+        
+        this.currentFilter = button.dataset.filter;
+        
+        // Apply filter to video preview
+        this.video.className = this.video.className.replace(/filter-\w+/g, '');
+        if (this.currentFilter !== 'none') {
+            this.video.classList.add(`filter-${this.currentFilter}`);
+        }
+        this.video.classList.add('active');
+    }
+
+    selectFrame(button) {
+        // Remove active class from all frame buttons (both regular and custom)
+        document.querySelectorAll('.frame-btn, .custom-frame-btn').forEach(btn => btn.classList.remove('active'));
+        button.classList.add('active');
+        
+        this.currentFrame = button.dataset.frame;
+    }
+
+    selectFrameColor(button) {
+        // Remove active class from all color buttons
+        document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('active'));
+        button.classList.add('active');
+        
+        this.currentFrameColor = button.dataset.color;
+    }
+
+    startPhotoExpirationCheck() {
+        // Check for expired photos every 5 minutes
+        setInterval(() => {
+            this.checkAndRemoveExpiredPhotos();
+        }, 5 * 60 * 1000); // 5 minutes
+        
+        // Also check on startup
+        this.checkAndRemoveExpiredPhotos();
+    }
+
+    checkAndRemoveExpiredPhotos() {
+        const oneHourInMs = 60 * 60 * 1000; // 1 hour in milliseconds
+        const now = Date.now();
+        
+        const initialCount = this.capturedPhotos.length;
+        
+        // Filter out photos older than 1 hour
+        this.capturedPhotos = this.capturedPhotos.filter(photo => {
+            return (now - photo.timestamp) < oneHourInMs;
+        });
+        
+        // If photos were removed, update storage and preview
+        if (this.capturedPhotos.length < initialCount) {
+            this.savePhotosToStorage();
+            
+            // Update preview - show latest photo if available, otherwise clear
+            if (this.capturedPhotos.length > 0) {
+                this.updatePhotoPreview(this.capturedPhotos[0]);
+            } else {
+                this.clearPhotoPreview();
+                document.getElementById('download-photo').disabled = true;
+            }
+            
+            console.log(`Removed ${initialCount - this.capturedPhotos.length} expired photos for privacy`);
+        }
+    }
+
+    clearPhotoPreview() {
+        const previewContainer = document.getElementById('photo-preview');
+        previewContainer.innerHTML = `
+            <div class="preview-placeholder">
+                <div class="placeholder-icon">📷</div>
+                <p>No photo taken yet</p>
+            </div>
+        `;
+    }
+
+    async capturePhoto() {
+        if (!this.stream) {
+            this.showToast('Camera Error', 'Camera is not active. Please start the camera first.', 'error');
+            return;
+        }
+
+        // Check if this frame requires multiple shots
+        if (this.currentFrame === 'strip' && !this.isCapturingMultiShot) {
+            await this.captureMultiShot();
+            return;
+        }
+
+        // Add camera flash animation
+        this.showCameraFlash();
+        
+        // Add camera capture animation
+        const cameraPreview = document.querySelector('.camera-preview');
+        cameraPreview.classList.add('capturing');
+        setTimeout(() => cameraPreview.classList.remove('capturing'), 600);
+
+        this.showLoading('PROCESSING...');
+
+        try {
+            // Check if video is ready
+            if (this.video.videoWidth === 0 || this.video.videoHeight === 0) {
+                throw new Error('Video not ready - dimensions are zero');
+            }
+
+            // Set canvas size based on frame type
+            this.setCanvasSizeForFrame();
+
+            // Clear canvas first
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+            // Draw the video frame to canvas
+            this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+
+            // Apply filter
+            this.applyFilter(this.currentFilter);
+
+            // Apply frame
+            await this.applyFrame(this.currentFrame);
+
+            // Convert to data URL with error handling
+            let dataURL;
+            try {
+                dataURL = this.canvas.toDataURL('image/png', 0.9);
+                if (!dataURL || dataURL === 'data:,') {
+                    throw new Error('Failed to generate image data');
+                }
+            } catch (canvasError) {
+                console.error('Canvas toDataURL error:', canvasError);
+                throw new Error('Failed to process image data');
+            }
+
+            // Store photo
+            const photo = {
+                data: dataURL,
+                filter: this.currentFilter,
+                frame: this.currentFrame,
+                timestamp: Date.now()
+            };
+
+            this.capturedPhotos.unshift(photo);
+            
+            // Save to storage with error handling
+            try {
+                this.savePhotosToStorage();
+            } catch (storageError) {
+                console.warn('Storage save failed:', storageError);
+                // Continue anyway - photo is still captured in memory
+            }
+
+            // Update photo preview
+            this.updatePhotoPreview(photo);
+
+            // Enable download button
+            const downloadBtn = document.getElementById('download-photo');
+            if (downloadBtn) {
+                downloadBtn.disabled = false;
+            }
+
+            this.showToast('Photo Captured!', 'Your photo has been processed and is ready to download.', 'success');
+            
+        } catch (error) {
+            console.error('Photo capture error:', error);
+            this.showToast('Capture Error', `Failed to capture photo: ${error.message}. Please try again.`, 'error');
+        } finally {
+            this.hideLoading();
+        }
+    }
+
+    async captureMultiShot() {
+        this.isCapturingMultiShot = true;
+        this.multiShotPhotos = [];
+        
+        const captureBtn = document.getElementById('capture-photo');
+        const originalText = captureBtn.textContent;
+        
+        try {
+            for (let i = 0; i < 4; i++) {
+                captureBtn.textContent = `📸 SHOT ${i + 1}/4`;
+                captureBtn.disabled = true;
+                
+                // Show countdown for next shot (except first)
+                if (i > 0) {
+                    await this.showCountdown(3);
+                }
+                
+                // Capture individual shot
+                await this.captureSingleShot();
+                
+                // Wait a bit between shots
+                if (i < 3) {
+                    await this.delay(1000);
+                }
+            }
+            
+            // Create film strip composite
+            await this.createFilmStripComposite();
+            
+        } catch (error) {
+            console.error('Multi-shot capture error:', error);
+            this.showToast('Capture Error', 'Failed to capture film strip. Please try again.', 'error');
+        } finally {
+            this.isCapturingMultiShot = false;
+            captureBtn.textContent = originalText;
+            captureBtn.disabled = false;
+            this.hideLoading();
+        }
+    }
+
+    async captureSingleShot() {
+        return new Promise((resolve, reject) => {
+            try {
+                // Add camera flash animation
+                this.showCameraFlash();
+                
+                // Check if video is ready
+                if (this.video.videoWidth === 0 || this.video.videoHeight === 0) {
+                    throw new Error('Video not ready');
+                }
+
+                // Create temporary canvas for this shot
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = this.video.videoWidth;
+                tempCanvas.height = this.video.videoHeight;
+                const tempCtx = tempCanvas.getContext('2d');
+
+                // Draw video frame
+                tempCtx.drawImage(this.video, 0, 0, tempCanvas.width, tempCanvas.height);
+
+                // Apply filter to temp canvas
+                const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+                this.applyFilterToImageData(imageData, this.currentFilter);
+                tempCtx.putImageData(imageData, 0, 0);
+
+                // Store the shot
+                const shotData = tempCanvas.toDataURL('image/png', 0.9);
+                this.multiShotPhotos.push(shotData);
+                
+                resolve();
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+    async showCountdown(seconds) {
+        return new Promise((resolve) => {
+            let count = seconds;
+            const countdownInterval = setInterval(() => {
+                this.showToast(`Get Ready!`, `Next shot in ${count}...`, 'info');
+                count--;
+                if (count < 0) {
+                    clearInterval(countdownInterval);
+                    resolve();
+                }
+            }, 1000);
+        });
+    }
+
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    showCameraFlash() {
+        const flash = document.createElement('div');
+        flash.className = 'camera-flash';
+        document.body.appendChild(flash);
+        
+        setTimeout(() => {
+            document.body.removeChild(flash);
+        }, 500);
+    }
+
+    setCanvasSizeForFrame() {
+        const baseWidth = this.video.videoWidth;
+        const baseHeight = this.video.videoHeight;
+        
+        switch (this.currentFrame) {
+            case 'strip':
+                // This will be overridden by createFilmStripComposite for multi-shot
+                // For single shot strip, use smaller dimensions
+                this.canvas.width = 440;
+                this.canvas.height = 1320;
+                break;
+                
+            case 'collage':
+                // 3:4 aspect ratio for collage
+                this.canvas.width = Math.min(baseWidth, 600);
+                this.canvas.height = (this.canvas.width * 4) / 3;
+                break;
+                
+            case 'polaroid':
+                // 1:1 aspect ratio for polaroid (square)
+                const squareSize = Math.min(baseWidth, baseHeight);
+                this.canvas.width = squareSize;
+                this.canvas.height = squareSize;
+                break;
+                
+            default:
+                // Standard size for custom frames
+                this.canvas.width = baseWidth;
+                this.canvas.height = baseHeight;
+                break;
+        }
+    }
+
+    updatePhotoPreview(photo) {
+        const previewContainer = document.getElementById('photo-preview');
+        previewContainer.innerHTML = `
+            <img src="${photo.data}" alt="Latest photo" class="preview-image">
+        `;
+    }
+
+    applyFilter(filter) {
+        const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Apply filter using new filter system
+        this.applyFilterToImageData(imageData, filter);
+
+        this.ctx.putImageData(imageData, 0, 0);
+    }
+
+    applyFilterToImageData(imageData, filter) {
+        const data = imageData.data;
+        
+        switch (filter) {
+            case 'monomuse':
+                // MonoMuse: grayscale(100%) contrast(120%)
+                for (let i = 0; i < data.length; i += 4) {
+                    // Convert to grayscale
+                    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+                    // Apply contrast (120%)
+                    const contrasted = ((gray - 128) * 1.2) + 128;
+                    data[i] = Math.max(0, Math.min(255, contrasted));
+                    data[i + 1] = Math.max(0, Math.min(255, contrasted));
+                    data[i + 2] = Math.max(0, Math.min(255, contrasted));
+                }
+                break;
+                
+            case 'retrograde':
+                // Retrograde: contrast(110%) sepia(40%) brightness(80%) saturate(70%)
+                for (let i = 0; i < data.length; i += 4) {
+                    let r = data[i];
+                    let g = data[i + 1];
+                    let b = data[i + 2];
+                    
+                    // Apply brightness (80%)
+                    r *= 0.8;
+                    g *= 0.8;
+                    b *= 0.8;
+                    
+                    // Apply saturation (70%)
+                    const gray = r * 0.299 + g * 0.587 + b * 0.114;
+                    r = gray + (r - gray) * 0.7;
+                    g = gray + (g - gray) * 0.7;
+                    b = gray + (b - gray) * 0.7;
+                    
+                    // Apply sepia (40%)
+                    const sepiaR = (r * 0.393) + (g * 0.769) + (b * 0.189);
+                    const sepiaG = (r * 0.349) + (g * 0.686) + (b * 0.168);
+                    const sepiaB = (r * 0.272) + (g * 0.534) + (b * 0.131);
+                    
+                    r = r * 0.6 + sepiaR * 0.4;
+                    g = g * 0.6 + sepiaG * 0.4;
+                    b = b * 0.6 + sepiaB * 0.4;
+                    
+                    // Apply contrast (110%)
+                    r = ((r - 128) * 1.1) + 128;
+                    g = ((g - 128) * 1.1) + 128;
+                    b = ((b - 128) * 1.1) + 128;
+                    
+                    data[i] = Math.max(0, Math.min(255, r));
+                    data[i + 1] = Math.max(0, Math.min(255, g));
+                    data[i + 2] = Math.max(0, Math.min(255, b));
+                }
+                break;
+                
+            case 'vivapop':
+                // VivaPop: saturate(150%) brightness(110%) contrast(105%)
+                for (let i = 0; i < data.length; i += 4) {
+                    let r = data[i];
+                    let g = data[i + 1];
+                    let b = data[i + 2];
+                    
+                    // Apply brightness (110%)
+                    r *= 1.1;
+                    g *= 1.1;
+                    b *= 1.1;
+                    
+                    // Apply saturation (150%)
+                    const gray = r * 0.299 + g * 0.587 + b * 0.114;
+                    r = gray + (r - gray) * 1.5;
+                    g = gray + (g - gray) * 1.5;
+                    b = gray + (b - gray) * 1.5;
+                    
+                    // Apply contrast (105%)
+                    r = ((r - 128) * 1.05) + 128;
+                    g = ((g - 128) * 1.05) + 128;
+                    b = ((b - 128) * 1.05) + 128;
+                    
+                    data[i] = Math.max(0, Math.min(255, r));
+                    data[i + 1] = Math.max(0, Math.min(255, g));
+                    data[i + 2] = Math.max(0, Math.min(255, b));
+                }
+                break;
+                
+            case 'solshine':
+                // SolShine: saturate(140%) brightness(115%) contrast(110%) sepia(10%)
+                for (let i = 0; i < data.length; i += 4) {
+                    let r = data[i];
+                    let g = data[i + 1];
+                    let b = data[i + 2];
+                    
+                    // Apply brightness (115%)
+                    r *= 1.15;
+                    g *= 1.15;
+                    b *= 1.15;
+                    
+                    // Apply saturation (140%)
+                    const gray = r * 0.299 + g * 0.587 + b * 0.114;
+                    r = gray + (r - gray) * 1.4;
+                    g = gray + (g - gray) * 1.4;
+                    b = gray + (b - gray) * 1.4;
+                    
+                    // Apply slight sepia (10%)
+                    const sepiaR = (r * 0.393) + (g * 0.769) + (b * 0.189);
+                    const sepiaG = (r * 0.349) + (g * 0.686) + (b * 0.168);
+                    const sepiaB = (r * 0.272) + (g * 0.534) + (b * 0.131);
+                    
+                    r = r * 0.9 + sepiaR * 0.1;
+                    g = g * 0.9 + sepiaG * 0.1;
+                    b = b * 0.9 + sepiaB * 0.1;
+                    
+                    // Apply contrast (110%)
+                    r = ((r - 128) * 1.1) + 128;
+                    g = ((g - 128) * 1.1) + 128;
+                    b = ((b - 128) * 1.1) + 128;
+                    
+                    data[i] = Math.max(0, Math.min(255, r));
+                    data[i + 1] = Math.max(0, Math.min(255, g));
+                    data[i + 2] = Math.max(0, Math.min(255, b));
+                }
+                break;
+                
+            case 'none':
+            default:
+                // No filter applied - leave image data unchanged
+                break;
+        }
+    }
+
+    async createFilmStripComposite() {
+        if (this.multiShotPhotos.length !== 4) {
+            throw new Error('Need exactly 4 shots for film strip');
+        }
+
+        this.showLoading('CREATING FILM STRIP...');
+
+        // Set canvas to film strip dimensions (2:6 aspect ratio) with extra space for borders
+        this.canvas.width = 440;  // Slightly wider for border effects
+        this.canvas.height = 1320; // Taller for authentic film strip look
+
+        // Create film strip background (using selected color)
+        this.ctx.fillStyle = this.currentFrameColor === '#ffffff' ? '#2a2a2a' : this.currentFrameColor;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Add film strip perforations on sides
+        this.addFilmPerforations();
+
+        // Load all shot images
+        const shotImages = await Promise.all(
+            this.multiShotPhotos.map(shotData => {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = reject;
+                    img.src = shotData;
+                });
+            })
+        );
+
+        // Calculate photo dimensions with proper spacing
+        const totalPhotoArea = this.canvas.height * 0.7; // 70% for photos, 30% for spacing/borders
+        const photoHeight = totalPhotoArea / 4;
+        const photoWidth = this.canvas.width * 0.75; // 75% width for photos
+        const photoX = (this.canvas.width - photoWidth) / 2;
+        const spacingY = (this.canvas.height - totalPhotoArea) / 5; // Space between photos and at ends
+
+        // Draw each photo with white border (like real photo booth strips)
+        shotImages.forEach((img, index) => {
+            const y = spacingY + (index * (photoHeight + spacingY));
+            
+            // Draw white photo border (like real instant photos)
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.fillRect(photoX - 6, y - 6, photoWidth + 12, photoHeight + 12);
+            
+            // Add slight shadow behind photo
+            this.ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            this.ctx.fillRect(photoX - 4, y - 4, photoWidth + 8, photoHeight + 8);
+            
+            // Draw the actual photo
+            this.ctx.drawImage(img, photoX, y, photoWidth, photoHeight);
+        });
+
+        // Add film strip branding at bottom
+        this.addFilmStripBranding();
+
+        // Store the film strip photo
+        const dataURL = this.canvas.toDataURL('image/png', 0.9);
+        const photo = {
+            data: dataURL,
+            filter: this.currentFilter,
+            frame: this.currentFrame,
+            timestamp: Date.now(),
+            multiShot: true
+        };
+
+        this.capturedPhotos.unshift(photo);
+        this.savePhotosToStorage();
+        this.updatePhotoPreview(photo);
+
+        // Enable download button
+        const downloadBtn = document.getElementById('download-photo');
+        if (downloadBtn) {
+            downloadBtn.disabled = false;
+        }
+
+        this.showToast('Film Strip Created!', 'Your authentic 4-shot film strip is ready!', 'success');
+    }
+
+    addFilmPerforations() {
+        // Add realistic film perforations on both sides
+        const perfSize = 8;
+        const perfSpacing = 16;
+        const perfsPerSide = Math.floor(this.canvas.height / perfSpacing);
+        
+        this.ctx.fillStyle = '#000000';
+        
+        for (let i = 0; i < perfsPerSide; i++) {
+            const y = i * perfSpacing + perfSpacing/2;
+            
+            // Left side perforations
+            this.ctx.fillRect(8, y - perfSize/2, perfSize, perfSize);
+            
+            // Right side perforations
+            this.ctx.fillRect(this.canvas.width - 16, y - perfSize/2, perfSize, perfSize);
+        }
+    }
+
+    addFilmStripBranding() {
+        // Add small branding text at bottom like real photo booth strips
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.font = 'bold 12px "Courier Prime", monospace';
+        this.ctx.textAlign = 'center';
+        
+        const brandingY = this.canvas.height - 40;
+        this.ctx.fillText('PHOTOBOOTH', this.canvas.width / 2, brandingY);
+        
+        // Add small date/time
+        this.ctx.font = '10px "Courier Prime", monospace';
+        const date = new Date().toLocaleDateString('en-US', { 
+            month: '2-digit', 
+            day: '2-digit', 
+            year: '2-digit' 
+        });
+        this.ctx.fillText(date, this.canvas.width / 2, brandingY + 15);
+    }
+
+    async applyFrame(frame) {
+        const width = this.canvas.width;
+        const height = this.canvas.height;
+        
+        // Check if it's a custom frame
+        if (frame.startsWith('custom-')) {
+            const frameId = frame.replace('custom-', '');
+            await this.applyCustomFrame(frameId, width, height);
+            return;
+        }
+        
+        switch (frame) {
+            case 'polaroid':
+                this.applyPolaroidFrame(width, height);
+                break;
+                
+            case 'strip':
+                // Strip frame is handled by multi-shot capture
+                // This case is for when strip is selected but single shot is taken
+                this.applyStripFrame(width, height);
+                break;
+                
+            case 'collage':
+                this.applyCollageFrame(width, height);
+                break;
+                
+            default:
+                // No frame applied for other cases
+                break;
+        }
+    }
+
+    applyPolaroidFrame(width, height) {
+        // Add white border with bottom text area
+        const borderSize = 40;
+        const bottomBorder = 120;
+        
+        // Create temporary canvas with current image
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(this.canvas, 0, 0);
+        
+        // Resize main canvas
+        this.canvas.width = width + (borderSize * 2);
+        this.canvas.height = height + borderSize + bottomBorder;
+        
+        // Fill with white background
+        this.ctx.fillStyle = '#ffffff';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Add subtle shadow
+        this.ctx.shadowColor = 'rgba(0,0,0,0.2)';
+        this.ctx.shadowBlur = 15;
+        this.ctx.shadowOffsetX = 5;
+        this.ctx.shadowOffsetY = 5;
+        
+        // Draw the image with border
+        this.ctx.drawImage(tempCanvas, borderSize, borderSize);
+        
+        // Reset shadow
+        this.ctx.shadowColor = 'transparent';
+        this.ctx.shadowBlur = 0;
+        this.ctx.shadowOffsetX = 0;
+        this.ctx.shadowOffsetY = 0;
+    }
+
+    applyStripFrame(width, height) {
+        // This method is called when not using multi-shot
+        // Create a single photo strip effect
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(this.canvas, 0, 0);
+        
+        // Set strip dimensions (2:6 aspect ratio)
+        this.canvas.width = 400;
+        this.canvas.height = 1200;
+        
+        const stripHeight = this.canvas.height / 4;
+        const stripWidth = this.canvas.width - 20;
+        
+        // Fill background
+        this.ctx.fillStyle = '#f5f1e8';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Draw 4 copies of the same image
+        for (let i = 0; i < 4; i++) {
+            const y = 10 + (i * (stripHeight - 5));
+            const x = 10;
+            
+            // Add white border
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.fillRect(x - 2, y - 2, stripWidth + 4, stripHeight - 6);
+            
+            this.ctx.drawImage(tempCanvas, x, y, stripWidth, stripHeight - 10);
+        }
+    }
+
+    applyCollageFrame(width, height) {
+        // For collage, we should ideally capture 4 separate shots too
+        // But for now, we'll use the single image in 4 positions with slight variations
+        
+        // Create temporary canvas with current image
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(this.canvas, 0, 0);
+        
+        // Set 3:4 aspect ratio for collage
+        this.canvas.width = 600;
+        this.canvas.height = 800;
+        
+        const halfWidth = this.canvas.width / 2;
+        const halfHeight = this.canvas.height / 2;
+        const gap = 15;
+        const photoWidth = halfWidth - gap;
+        const photoHeight = halfHeight - gap;
+        
+        // Fill background with selected color
+        this.ctx.fillStyle = this.currentFrameColor;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Add decorative border
+        this.ctx.strokeStyle = '#d4c4a8';
+        this.ctx.lineWidth = 3;
+        this.ctx.strokeRect(5, 5, this.canvas.width - 10, this.canvas.height - 10);
+        
+        // Draw 4 copies in grid with slight variations
+        const positions = [
+            { x: gap/2, y: gap/2 }, // Top left
+            { x: halfWidth + gap/2, y: gap/2 }, // Top right
+            { x: gap/2, y: halfHeight + gap/2 }, // Bottom left
+            { x: halfWidth + gap/2, y: halfHeight + gap/2 } // Bottom right
+        ];
+        
+        positions.forEach((pos, index) => {
+            // Add white photo border
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.fillRect(pos.x - 5, pos.y - 5, photoWidth + 10, photoHeight + 10);
+            
+            // Add subtle shadow
+            this.ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            this.ctx.fillRect(pos.x + 2, pos.y + 2, photoWidth + 5, photoHeight + 5);
+            
+            // Draw the photo (with slight rotation for variety)
+            this.ctx.save();
+            this.ctx.translate(pos.x + photoWidth/2, pos.y + photoHeight/2);
+            const rotation = (index - 1.5) * 0.02; // Slight rotation variation
+            this.ctx.rotate(rotation);
+            this.ctx.drawImage(tempCanvas, -photoWidth/2, -photoHeight/2, photoWidth, photoHeight);
+            this.ctx.restore();
+        });
+    }
+
+    async applyCustomFrame(frameId, width, height) {
+        const customFrame = this.customFrames.find(frame => frame.id === frameId);
+        if (!customFrame) return;
+        
+        try {
+            // Create temporary canvas with current image
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = width;
+            tempCanvas.height = height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(this.canvas, 0, 0);
+            
+            // Load the frame image
+            const frameImg = new Image();
+            await new Promise((resolve, reject) => {
+                frameImg.onload = resolve;
+                frameImg.onerror = reject;
+                frameImg.src = customFrame.imagePath;
+            });
+            
+            // Resize canvas to match frame dimensions or maintain aspect ratio
+            const frameAspectRatio = frameImg.width / frameImg.height;
+            const photoAspectRatio = width / height;
+            
+            let newCanvasWidth, newCanvasHeight;
+            
+            if (frameAspectRatio > photoAspectRatio) {
+                // Frame is wider - match frame width
+                newCanvasWidth = frameImg.width;
+                newCanvasHeight = frameImg.height;
+            } else {
+                // Frame is taller or same ratio - match frame height
+                newCanvasWidth = frameImg.width;
+                newCanvasHeight = frameImg.height;
+            }
+            
+            // Resize the main canvas
+            this.canvas.width = newCanvasWidth;
+            this.canvas.height = newCanvasHeight;
+            
+            // Clear the canvas
+            this.ctx.clearRect(0, 0, newCanvasWidth, newCanvasHeight);
+            
+            // Calculate how to fit the photo in the frame
+            // Assume the frame has a transparent center where the photo should go
+            // For now, we'll center the photo and then overlay the frame
+            
+            const photoScale = Math.min(newCanvasWidth / width, newCanvasHeight / height) * 0.8; // 0.8 to leave room for frame
+            const scaledPhotoWidth = width * photoScale;
+            const scaledPhotoHeight = height * photoScale;
+            const photoX = (newCanvasWidth - scaledPhotoWidth) / 2;
+            const photoY = (newCanvasHeight - scaledPhotoHeight) / 2;
+            
+            // Draw the photo first
+            this.ctx.drawImage(tempCanvas, photoX, photoY, scaledPhotoWidth, scaledPhotoHeight);
+            
+            // Draw the frame overlay
+            this.ctx.drawImage(frameImg, 0, 0, newCanvasWidth, newCanvasHeight);
+            
+        } catch (error) {
+            console.error('Error applying custom frame:', error);
+            this.showToast('Frame Error', 'Failed to apply custom frame.', 'error');
+        }
+    }
+    
+    downloadLatestPhoto() {
+        if (this.capturedPhotos.length === 0) {
+            this.showToast('No Photos', 'No photos available to download. Please capture a photo first.', 'error');
+            return;
+        }
+
+        try {
+            const photo = this.capturedPhotos[0];
+            
+            // Validate photo data
+            if (!photo.data || !photo.data.startsWith('data:image/')) {
+                throw new Error('Invalid photo data');
+            }
+            
+            const link = document.createElement('a');
+            const timestamp = new Date(photo.timestamp).toISOString().replace(/[:.]/g, '-');
+            link.download = `photobooth-${timestamp}.png`;
+            link.href = photo.data;
+            
+            // Add to DOM temporarily
+            document.body.appendChild(link);
+            link.click();
+            
+            // Clean up
+            setTimeout(() => {
+                document.body.removeChild(link);
+            }, 100);
+
+            this.showToast('Photo Downloaded!', 'Your photo has been saved to your device.', 'success');
+            
+        } catch (error) {
+            console.error('Download error:', error);
+            this.showToast('Download Error', `Failed to download photo: ${error.message}. Please try again.`, 'error');
+        }
+    }
+
+    updateGallery() {
+        // Gallery functionality removed - photos are stored and can be downloaded
+        // This method is kept for compatibility but does nothing
+    }
+
+    savePhotosToStorage() {
+        try {
+            // Only save the latest 5 photos to prevent storage overflow and reduce memory usage
+            const photosToSave = this.capturedPhotos.slice(0, 5);
+            
+            // Check if localStorage is available
+            if (typeof(Storage) === "undefined") {
+                console.warn('localStorage not supported');
+                return;
+            }
+            
+            const serializedPhotos = JSON.stringify(photosToSave);
+            
+            // Check storage size (rough estimate)
+            if (serializedPhotos.length > 10 * 1024 * 1024) { // 10MB limit
+                console.warn('Photos too large for localStorage, reducing count');
+                const smallerSet = this.capturedPhotos.slice(0, 2);
+                localStorage.setItem('photobooth-photos', JSON.stringify(smallerSet));
+            } else {
+                localStorage.setItem('photobooth-photos', serializedPhotos);
+            }
+            
+        } catch (error) {
+            if (error.name === 'QuotaExceededError') {
+                console.warn('localStorage quota exceeded, clearing old photos');
+                try {
+                    // Try to save just the latest photo
+                    const latestOnly = this.capturedPhotos.slice(0, 1);
+                    localStorage.setItem('photobooth-photos', JSON.stringify(latestOnly));
+                } catch (retryError) {
+                    console.warn('Still cannot save to localStorage:', retryError);
+                    localStorage.removeItem('photobooth-photos');
+                }
+            } else {
+                console.warn('Failed to save photos to localStorage:', error);
+            }
+        }
+    }
+
+    loadPhotosFromStorage() {
+        try {
+            const savedPhotos = localStorage.getItem('photobooth-photos');
+            if (savedPhotos) {
+                this.capturedPhotos = JSON.parse(savedPhotos);
+                
+                // Update preview with latest photo
+                if (this.capturedPhotos.length > 0) {
+                    this.updatePhotoPreview(this.capturedPhotos[0]);
+                    document.getElementById('download-photo').disabled = false;
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to load photos from localStorage:', error);
+        }
+    }
+
+    showLoading(text) {
+        const overlay = document.getElementById('loading-overlay');
+        const loadingText = document.getElementById('loading-text');
+        loadingText.textContent = text;
+        overlay.classList.remove('hidden');
+    }
+
+    hideLoading() {
+        const overlay = document.getElementById('loading-overlay');
+        overlay.classList.add('hidden');
+    }
+
+    showToast(title, message, type = 'success') {
+        const container = document.getElementById('toast-container');
+        
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.innerHTML = `
+            <div class="toast-title">${title}</div>
+            <div class="toast-message">${message}</div>
+        `;
+        
+        container.appendChild(toast);
+        
+        // Auto remove after 4 seconds
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => {
+                if (container.contains(toast)) {
+                    container.removeChild(toast);
+                }
+            }, 300);
+        }, 4000);
+    }
+
+    // Cleanup method
+    destroy() {
+        if (this.stream) {
+            this.stream.getTracks().forEach(track => track.stop());
+        }
+    }
+}
+
+// Initialize the app when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    window.photoboothApp = new PhotoboothApp();
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    if (window.photoboothApp) {
+        window.photoboothApp.destroy();
+    }
+});
