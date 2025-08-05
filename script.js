@@ -510,36 +510,8 @@ class PhotoboothApp {
             // Clear canvas first
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-            // Draw the video frame to canvas with proper aspect ratio preservation
-            // Note: Video is mirrored in CSS for user comfort, so we need to un-mirror it here
-            const videoAspectRatio = this.video.videoWidth / this.video.videoHeight;
-            const canvasAspectRatio = this.canvas.width / this.canvas.height;
-            
-            let drawWidth, drawHeight, drawX, drawY;
-            
-            if (videoAspectRatio > canvasAspectRatio) {
-                // Video is wider - fit by height, center horizontally
-                drawHeight = this.canvas.height;
-                drawWidth = drawHeight * videoAspectRatio;
-                drawX = (this.canvas.width - drawWidth) / 2;
-                drawY = 0;
-            } else {
-                // Video is taller - fit by width, center vertically
-                drawWidth = this.canvas.width;
-                drawHeight = drawWidth / videoAspectRatio;
-                drawX = 0;
-                drawY = (this.canvas.height - drawHeight) / 2;
-            }
-            
-            // Save context and apply horizontal flip to un-mirror if camera is mirrored
-            this.ctx.save();
-            if (this.mirrorCamera) {
-                this.ctx.scale(-1, 1); // Flip horizontally to un-mirror
-                this.ctx.drawImage(this.video, -drawX - drawWidth, drawY, drawWidth, drawHeight);
-            } else {
-                this.ctx.drawImage(this.video, drawX, drawY, drawWidth, drawHeight);
-            }
-            this.ctx.restore();
+            // Draw the video frame to canvas with improved aspect ratio handling for all devices
+            this.drawVideoToCanvas();
 
             // Apply filter
             this.applyFilter(this.currentFilter);
@@ -636,6 +608,117 @@ class PhotoboothApp {
         }
     }
 
+    drawVideoToCanvas() {
+        // Device-aware video drawing with proper aspect ratio handling
+        const videoAspectRatio = this.video.videoWidth / this.video.videoHeight;
+        const canvasAspectRatio = this.canvas.width / this.canvas.height;
+        
+        console.log('📐 Drawing video:', {
+            videoSize: `${this.video.videoWidth}x${this.video.videoHeight}`,
+            canvasSize: `${this.canvas.width}x${this.canvas.height}`,
+            videoAspectRatio: videoAspectRatio.toFixed(2),
+            canvasAspectRatio: canvasAspectRatio.toFixed(2),
+            deviceType: this.deviceInfo
+        });
+        
+        let drawWidth, drawHeight, drawX, drawY;
+        
+        // Different fitting strategies based on device and frame type
+        if (this.currentFrame === 'polaroid') {
+            // Polaroid should always be square - crop to fit
+            const minDimension = Math.min(this.video.videoWidth, this.video.videoHeight);
+            drawWidth = this.canvas.width;
+            drawHeight = this.canvas.height;
+            drawX = 0;
+            drawY = 0;
+            
+            // For polaroid, we'll crop the video to square first
+            this.ctx.save();
+            if (this.mirrorCamera) {
+                this.ctx.scale(-1, 1);
+                this.ctx.drawImage(
+                    this.video,
+                    (this.video.videoWidth - minDimension) / 2, // Source crop X
+                    (this.video.videoHeight - minDimension) / 2, // Source crop Y
+                    minDimension, // Source crop width
+                    minDimension, // Source crop height
+                    -drawWidth, // Destination X (flipped)
+                    drawY, // Destination Y
+                    drawWidth, // Destination width
+                    drawHeight // Destination height
+                );
+            } else {
+                this.ctx.drawImage(
+                    this.video,
+                    (this.video.videoWidth - minDimension) / 2,
+                    (this.video.videoHeight - minDimension) / 2,
+                    minDimension,
+                    minDimension,
+                    drawX,
+                    drawY,
+                    drawWidth,
+                    drawHeight
+                );
+            }
+            this.ctx.restore();
+            return;
+        }
+        
+        // For mobile devices (portrait), we need special handling
+        if (this.deviceInfo && this.deviceInfo.isMobile && videoAspectRatio < 1) {
+            // Mobile portrait mode - video is taller than wide
+            if (this.currentFrame === 'strip') {
+                // Strip frame is already portrait, fit by width
+                drawWidth = this.canvas.width;
+                drawHeight = drawWidth / videoAspectRatio;
+                drawX = 0;
+                drawY = (this.canvas.height - drawHeight) / 2;
+            } else {
+                // Other frames - maintain aspect ratio, fit within frame
+                if (videoAspectRatio > canvasAspectRatio) {
+                    // Video wider relative to canvas - fit by height
+                    drawHeight = this.canvas.height;
+                    drawWidth = drawHeight * videoAspectRatio;
+                    drawX = (this.canvas.width - drawWidth) / 2;
+                    drawY = 0;
+                } else {
+                    // Video taller relative to canvas - fit by width
+                    drawWidth = this.canvas.width;
+                    drawHeight = drawWidth / videoAspectRatio;
+                    drawX = 0;
+                    drawY = (this.canvas.height - drawHeight) / 2;
+                }
+            }
+        } else {
+            // Desktop/tablet or landscape mode - standard aspect ratio handling
+            if (videoAspectRatio > canvasAspectRatio) {
+                // Video is wider relative to canvas - fit by height, center horizontally
+                drawHeight = this.canvas.height;
+                drawWidth = drawHeight * videoAspectRatio;
+                drawX = (this.canvas.width - drawWidth) / 2;
+                drawY = 0;
+            } else {
+                // Video is taller relative to canvas - fit by width, center vertically
+                drawWidth = this.canvas.width;
+                drawHeight = drawWidth / videoAspectRatio;
+                drawX = 0;
+                drawY = (this.canvas.height - drawHeight) / 2;
+            }
+        }
+        
+        console.log('🎨 Draw dimensions:', { drawX, drawY, drawWidth, drawHeight });
+        
+        // Draw with proper mirroring
+        this.ctx.save();
+        if (this.mirrorCamera) {
+            this.ctx.scale(-1, 1); // Flip horizontally to un-mirror
+            this.ctx.drawImage(this.video, -drawX - drawWidth, drawY, drawWidth, drawHeight);
+        } else {
+            this.ctx.drawImage(this.video, drawX, drawY, drawWidth, drawHeight);
+        }
+        this.ctx.restore();
+    }
+
     async captureSingleShot() {
         return new Promise((resolve, reject) => {
             try {
@@ -647,19 +730,48 @@ class PhotoboothApp {
                     throw new Error('Video not ready');
                 }
 
-                // Create temporary canvas for this shot
+                // Create temporary canvas for this shot with proper aspect ratio
                 const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = this.video.videoWidth;
-                tempCanvas.height = this.video.videoHeight;
                 const tempCtx = tempCanvas.getContext('2d');
+                
+                // Set canvas size based on desired output (maintaining video aspect ratio)
+                const videoAspectRatio = this.video.videoWidth / this.video.videoHeight;
+                
+                if (this.deviceInfo && this.deviceInfo.isMobile && videoAspectRatio < 1) {
+                    // Mobile portrait - use portrait dimensions
+                    tempCanvas.width = 480;
+                    tempCanvas.height = 640;
+                } else {
+                    // Desktop/landscape - use landscape dimensions
+                    tempCanvas.width = 640;
+                    tempCanvas.height = 480;
+                }
+
+                // Draw video with proper aspect ratio fitting
+                const canvasAspectRatio = tempCanvas.width / tempCanvas.height;
+                let drawWidth, drawHeight, drawX, drawY;
+                
+                if (videoAspectRatio > canvasAspectRatio) {
+                    // Video wider - fit by height
+                    drawHeight = tempCanvas.height;
+                    drawWidth = drawHeight * videoAspectRatio;
+                    drawX = (tempCanvas.width - drawWidth) / 2;
+                    drawY = 0;
+                } else {
+                    // Video taller - fit by width
+                    drawWidth = tempCanvas.width;
+                    drawHeight = drawWidth / videoAspectRatio;
+                    drawX = 0;
+                    drawY = (tempCanvas.height - drawHeight) / 2;
+                }
 
                 // Draw video frame (un-mirror if camera is mirrored)
                 tempCtx.save();
                 if (this.mirrorCamera) {
                     tempCtx.scale(-1, 1); // Flip horizontally to un-mirror
-                    tempCtx.drawImage(this.video, -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height);
+                    tempCtx.drawImage(this.video, -drawX - drawWidth, drawY, drawWidth, drawHeight);
                 } else {
-                    tempCtx.drawImage(this.video, 0, 0, tempCanvas.width, tempCanvas.height);
+                    tempCtx.drawImage(this.video, drawX, drawY, drawWidth, drawHeight);
                 }
                 tempCtx.restore();
 
@@ -710,34 +822,80 @@ class PhotoboothApp {
     setCanvasSizeForFrame() {
         const baseWidth = this.video.videoWidth;
         const baseHeight = this.video.videoHeight;
+        const videoAspectRatio = baseWidth / baseHeight;
+        
+        console.log('📏 Setting canvas size for frame:', {
+            frame: this.currentFrame,
+            videoSize: `${baseWidth}x${baseHeight}`,
+            aspectRatio: videoAspectRatio.toFixed(2),
+            deviceType: this.deviceInfo
+        });
         
         switch (this.currentFrame) {
             case 'strip':
                 // This will be overridden by createFilmStripComposite for multi-shot
-                // For single shot strip, use smaller dimensions
-                this.canvas.width = 440;
-                this.canvas.height = 1320;
+                // For single shot strip, use device-appropriate dimensions
+                if (this.deviceInfo && this.deviceInfo.isMobile && videoAspectRatio < 1) {
+                    // Mobile portrait - narrower strip
+                    this.canvas.width = 360;
+                    this.canvas.height = 1280;
+                } else {
+                    // Desktop/landscape - standard strip
+                    this.canvas.width = 440;
+                    this.canvas.height = 1320;
+                }
                 break;
                 
             case 'collage':
-                // 3:4 aspect ratio for collage
-                this.canvas.width = Math.min(baseWidth, 600);
-                this.canvas.height = (this.canvas.width * 4) / 3;
+                // Device-aware collage dimensions
+                if (this.deviceInfo && this.deviceInfo.isMobile) {
+                    // Mobile - smaller collage
+                    this.canvas.width = 480;
+                    this.canvas.height = 640;
+                } else if (this.deviceInfo && this.deviceInfo.isTablet) {
+                    // Tablet - medium collage
+                    this.canvas.width = 540;
+                    this.canvas.height = 720;
+                } else {
+                    // Desktop - full size collage
+                    this.canvas.width = 600;
+                    this.canvas.height = 800;
+                }
                 break;
                 
             case 'polaroid':
-                // 1:1 aspect ratio for polaroid (square)
-                const squareSize = Math.min(baseWidth, baseHeight);
+                // Square format - device appropriate size
+                let squareSize;
+                if (this.deviceInfo && this.deviceInfo.isMobile) {
+                    squareSize = 480;
+                } else if (this.deviceInfo && this.deviceInfo.isTablet) {
+                    squareSize = 540;
+                } else {
+                    squareSize = 600;
+                }
                 this.canvas.width = squareSize;
                 this.canvas.height = squareSize;
                 break;
                 
             default:
-                // Standard size for custom frames
-                this.canvas.width = baseWidth;
-                this.canvas.height = baseHeight;
+                // Standard size - maintain aspect ratio but optimize for device
+                if (this.deviceInfo && this.deviceInfo.isMobile && videoAspectRatio < 1) {
+                    // Mobile portrait
+                    this.canvas.width = Math.min(baseWidth, 480);
+                    this.canvas.height = Math.min(baseHeight, 640);
+                } else if (this.deviceInfo && this.deviceInfo.isTablet) {
+                    // Tablet
+                    this.canvas.width = Math.min(baseWidth, 720);
+                    this.canvas.height = Math.min(baseHeight, 540);
+                } else {
+                    // Desktop
+                    this.canvas.width = Math.min(baseWidth, 800);
+                    this.canvas.height = Math.min(baseHeight, 600);
+                }
                 break;
         }
+        
+        console.log('📐 Canvas size set:', `${this.canvas.width}x${this.canvas.height}`);
     }
 
     updatePhotoPreview(photo) {
@@ -892,11 +1050,27 @@ class PhotoboothApp {
 
         this.showLoading('CREATING FILM STRIP...');
 
-        // Set canvas to film strip dimensions (2:6 aspect ratio) with extra space for borders
-        this.canvas.width = 440;  // Slightly wider for border effects
-        this.canvas.height = 1320; // Taller for authentic film strip look
+        // Device-aware film strip dimensions
+        let stripWidth, stripHeight;
+        if (this.deviceInfo && this.deviceInfo.isMobile) {
+            // Mobile - narrower strip for portrait orientation
+            stripWidth = 360;
+            stripHeight = 1280;
+        } else if (this.deviceInfo && this.deviceInfo.isTablet) {
+            // Tablet - medium strip
+            stripWidth = 400;
+            stripHeight = 1300;
+        } else {
+            // Desktop - full width strip
+            stripWidth = 440;
+            stripHeight = 1320;
+        }
 
-        // Create film strip background (using selected color)
+        // Set canvas to film strip dimensions
+        this.canvas.width = stripWidth;
+        this.canvas.height = stripHeight;
+
+        // Create film strip background (using selected color or default dark)
         this.ctx.fillStyle = this.currentFrameColor === '#ffffff' ? '#2a2a2a' : this.currentFrameColor;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -915,12 +1089,18 @@ class PhotoboothApp {
             })
         );
 
-        // Calculate photo dimensions with proper spacing
+        // Calculate photo dimensions with proper spacing (device-aware)
         const totalPhotoArea = this.canvas.height * 0.7; // 70% for photos, 30% for spacing/borders
         const photoHeight = totalPhotoArea / 4;
         const photoWidth = this.canvas.width * 0.75; // 75% width for photos
         const photoX = (this.canvas.width - photoWidth) / 2;
         const spacingY = (this.canvas.height - totalPhotoArea) / 5; // Space between photos and at ends
+
+        console.log('🎞️ Film strip dimensions:', {
+            stripSize: `${stripWidth}x${stripHeight}`,
+            photoSize: `${photoWidth}x${photoHeight}`,
+            deviceType: this.deviceInfo
+        });
 
         // Draw each photo with white border (like real photo booth strips)
         shotImages.forEach((img, index) => {
@@ -940,21 +1120,38 @@ class PhotoboothApp {
             
             let drawWidth, drawHeight, drawX, drawY;
             
+            // Always fit the image within the frame bounds
             if (imgAspectRatio > frameAspectRatio) {
                 // Image is wider - fit by height, center horizontally
                 drawHeight = photoHeight;
                 drawWidth = drawHeight * imgAspectRatio;
                 drawX = photoX + (photoWidth - drawWidth) / 2;
                 drawY = y;
+                
+                // If still too wide, fit by width instead
+                if (drawWidth > photoWidth) {
+                    drawWidth = photoWidth;
+                    drawHeight = drawWidth / imgAspectRatio;
+                    drawX = photoX;
+                    drawY = y + (photoHeight - drawHeight) / 2;
+                }
             } else {
                 // Image is taller - fit by width, center vertically
                 drawWidth = photoWidth;
                 drawHeight = drawWidth / imgAspectRatio;
                 drawX = photoX;
                 drawY = y + (photoHeight - drawHeight) / 2;
+                
+                // If still too tall, fit by height instead
+                if (drawHeight > photoHeight) {
+                    drawHeight = photoHeight;
+                    drawWidth = drawHeight * imgAspectRatio;
+                    drawX = photoX + (photoWidth - drawWidth) / 2;
+                    drawY = y;
+                }
             }
             
-            // Draw the actual photo with proper aspect ratio
+            // Draw the actual photo with proper aspect ratio and bounds checking
             this.ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
         });
 
