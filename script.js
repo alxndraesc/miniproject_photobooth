@@ -200,7 +200,7 @@ class PhotoboothApp {
             return;
         }
         
-        const text = 'PHOTOBOOTH';
+        const text = 'Mood – Classic. Retro. Pop.';
         let index = 0;
         
         // Add cursor styling
