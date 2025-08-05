@@ -490,7 +490,7 @@ class PhotoboothApp {
         }
 
         // Check if this frame requires multiple shots
-        if (this.currentFrame === 'strip' && !this.isCapturingMultiShot) {
+        if ((this.currentFrame === 'strip' || this.currentFrame === 'collage') && !this.isCapturingMultiShot) {
             await this.captureMultiShot();
             return;
         }
@@ -601,8 +601,12 @@ class PhotoboothApp {
                 }
             }
             
-            // Create film strip composite
-            await this.createFilmStripComposite();
+            // Create appropriate composite based on frame type
+            if (this.currentFrame === 'strip') {
+                await this.createFilmStripComposite();
+            } else if (this.currentFrame === 'collage') {
+                await this.createCollageComposite();
+            }
             
         } catch (error) {
             console.error('Multi-shot capture error:', error);
@@ -1046,8 +1050,8 @@ class PhotoboothApp {
         this.canvas.width = stripWidth;
         this.canvas.height = stripHeight;
 
-        // Create film strip background (using selected color or default dark)
-        this.ctx.fillStyle = this.currentFrameColor === '#ffffff' ? '#2a2a2a' : this.currentFrameColor;
+        // Create film strip background with selected color
+        this.ctx.fillStyle = this.currentFrameColor;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         // Add film strip perforations on sides
@@ -1065,12 +1069,12 @@ class PhotoboothApp {
             })
         );
 
-        // Calculate photo dimensions with proper spacing (device-aware)
-        const totalPhotoArea = this.canvas.height * 0.7; // 70% for photos, 30% for spacing/borders
+        // Calculate photo dimensions with tighter spacing (device-aware)
+        const totalPhotoArea = this.canvas.height * 0.72; // 72% for photos, 28% for spacing/text area
         const photoHeight = totalPhotoArea / 4;
         const photoWidth = this.canvas.width * 0.75; // 75% width for photos
         const photoX = (this.canvas.width - photoWidth) / 2;
-        const spacingY = (this.canvas.height - totalPhotoArea) / 5; // Space between photos and at ends
+        const spacingY = (this.canvas.height - totalPhotoArea - 80) / 5; // Minimal spacing, reserve 80px for text
 
         console.log('🎞️ Film strip dimensions:', {
             stripSize: `${stripWidth}x${stripHeight}`,
@@ -1151,6 +1155,127 @@ class PhotoboothApp {
         this.showToast('Film Strip Created!', 'Your authentic 4-shot film strip is ready! Photos clear on page refresh for privacy.', 'success');
     }
 
+    async createCollageComposite() {
+        if (this.multiShotPhotos.length !== 4) {
+            throw new Error('Need exactly 4 shots for collage');
+        }
+
+        this.showLoading('CREATING COLLAGE...');
+
+        // Load all shot images
+        const shotImages = await Promise.all(
+            this.multiShotPhotos.map(shotData => {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = reject;
+                    img.src = shotData;
+                });
+            })
+        );
+
+        // Set 3:4 aspect ratio for collage with extra space for text
+        this.canvas.width = 600;
+        this.canvas.height = 850; // Extra 50px for "amormento" text
+
+        const halfWidth = this.canvas.width / 2;
+        const halfHeight = (this.canvas.height - 50) / 2; // Subtract text space from photo area
+        const gap = 15;
+        const photoWidth = halfWidth - gap;
+        const photoHeight = halfHeight - gap;
+
+        // Fill background with selected color
+        this.ctx.fillStyle = this.currentFrameColor;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Add decorative border
+        this.ctx.strokeStyle = '#d4c4a8';
+        this.ctx.lineWidth = 3;
+        this.ctx.strokeRect(5, 5, this.canvas.width - 10, this.canvas.height - 10);
+
+        // Define positions for 4 photos
+        const positions = [
+            { x: gap/2, y: gap/2 }, // Top left
+            { x: halfWidth + gap/2, y: gap/2 }, // Top right
+            { x: gap/2, y: halfHeight + gap/2 }, // Bottom left
+            { x: halfWidth + gap/2, y: halfHeight + gap/2 } // Bottom right
+        ];
+
+        // Draw each photo
+        positions.forEach((pos, index) => {
+            const img = shotImages[index];
+            
+            // Add white photo border
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.fillRect(pos.x - 5, pos.y - 5, photoWidth + 10, photoHeight + 10);
+            
+            // Add subtle shadow
+            this.ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            this.ctx.fillRect(pos.x + 2, pos.y + 2, photoWidth + 5, photoHeight + 5);
+            
+            // Use precision center cropping to match photo slot ratio exactly
+            const imgAspectRatio = img.width / img.height;
+            const photoAspectRatio = photoWidth / photoHeight;
+            
+            let sourceX, sourceY, sourceWidth, sourceHeight;
+            
+            if (imgAspectRatio > photoAspectRatio) {
+                // Image is wider than photo slot - crop sides to exact slot ratio
+                sourceHeight = img.height;
+                sourceWidth = sourceHeight * photoAspectRatio; // Exact slot ratio match
+                sourceX = (img.width - sourceWidth) / 2; // Center horizontally
+                sourceY = 0;
+            } else {
+                // Image is taller than photo slot - crop top/bottom to exact slot ratio
+                sourceWidth = img.width;
+                sourceHeight = sourceWidth / photoAspectRatio; // Exact slot ratio match
+                sourceX = 0;
+                sourceY = (img.height - sourceHeight) / 2; // Center vertically
+            }
+            
+            // Draw the photo with precision center cropping and slight rotation for variety
+            this.ctx.save();
+            this.ctx.translate(pos.x + photoWidth/2, pos.y + photoHeight/2);
+            const rotation = (index - 1.5) * 0.02; // Slight rotation variation
+            this.ctx.rotate(rotation);
+            this.ctx.drawImage(
+                img,
+                sourceX, sourceY, sourceWidth, sourceHeight, // Source crop (exact slot ratio)
+                -photoWidth/2, -photoHeight/2, photoWidth, photoHeight // Destination
+            );
+            this.ctx.restore();
+        });
+
+        // Add "amormento" text at the bottom in italic monospace (same as subtitle)
+        const textColor = this.getContrastTextColor(this.currentFrameColor);
+        this.ctx.fillStyle = textColor;
+        this.ctx.font = 'italic 18px "Courier Prime", monospace';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('amormento', this.canvas.width / 2, this.canvas.height - 20);
+
+        // Store the collage photo
+        const dataURL = this.canvas.toDataURL('image/png', 0.9);
+        const photo = {
+            data: dataURL,
+            filter: this.currentFilter,
+            frame: this.currentFrame,
+            timestamp: Date.now(),
+            multiShot: true
+        };
+
+        this.capturedPhotos.unshift(photo);
+        this.savePhotosToStorage();
+        this.updatePhotoPreview(photo);
+
+        // Enable download button
+        const downloadBtn = document.getElementById('download-photo');
+        if (downloadBtn) {
+            downloadBtn.disabled = false;
+        }
+
+        this.showToast('Collage Created!', 'Your beautiful 4-photo collage is ready! Photos clear on page refresh for privacy.', 'success');
+    }
+
     addFilmPerforations() {
         // Add realistic film perforations on both sides
         const perfSize = 8;
@@ -1171,22 +1296,46 @@ class PhotoboothApp {
     }
 
     addFilmStripBranding() {
-        // Add small branding text at bottom like real photo booth strips
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.font = 'bold 12px "Courier Prime", monospace';
+        // Determine text color based on background brightness
+        const textColor = this.getContrastTextColor(this.currentFrameColor);
+        
+        // Add "amormento" text at bottom in italic monospace (same as subtitle)
+        this.ctx.fillStyle = textColor;
+        this.ctx.font = 'italic 16px "Courier Prime", monospace';
         this.ctx.textAlign = 'center';
         
-        const brandingY = this.canvas.height - 40;
-        this.ctx.fillText('PHOTOBOOTH', this.canvas.width / 2, brandingY);
+        const textY = this.canvas.height - 50;
+        this.ctx.fillText('amormento', this.canvas.width / 2, textY);
         
-        // Add small date/time
+        // Add small date/time below
         this.ctx.font = '10px "Courier Prime", monospace';
+        this.ctx.fontStyle = 'normal'; // Remove italic for date
         const date = new Date().toLocaleDateString('en-US', { 
             month: '2-digit', 
             day: '2-digit', 
             year: '2-digit' 
         });
-        this.ctx.fillText(date, this.canvas.width / 2, brandingY + 15);
+        this.ctx.fillText(date, this.canvas.width / 2, textY + 20);
+    }
+
+    getContrastTextColor(backgroundColor) {
+        // Convert hex color to RGB
+        let r, g, b;
+        if (backgroundColor.startsWith('#')) {
+            const hex = backgroundColor.slice(1);
+            r = parseInt(hex.substr(0, 2), 16);
+            g = parseInt(hex.substr(2, 2), 16);
+            b = parseInt(hex.substr(4, 2), 16);
+        } else {
+            // Default to dark background if color format is unexpected
+            return '#ffffff';
+        }
+        
+        // Calculate brightness using luminance formula
+        const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+        
+        // Return white text for dark backgrounds, sage green for light backgrounds
+        return brightness > 128 ? '#6d9650' : '#ffffff'; // sage green : white
     }
 
     async applyFrame(frame) {
