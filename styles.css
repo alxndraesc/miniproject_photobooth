@@ -437,8 +437,9 @@ body {
 .collage-preview {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.25rem;
-    padding: 0.5rem;
+    grid-template-rows: 1fr 1fr;
+    gap: 0.15rem;
+    padding: 0.3rem;
 }
 
 .collage-preview::before,
@@ -446,6 +447,21 @@ body {
     content: '';
     background: var(--sage-400);
     border-radius: 0.125rem;
+    aspect-ratio: 1;
+}
+
+/* Add additional squares using box-shadow technique */
+.collage-preview::before {
+    /* This creates the top-left square */
+    box-shadow: 
+        calc(100% + 0.15rem) 0 0 var(--sage-400), /* top-right */
+        0 calc(100% + 0.15rem) 0 var(--sage-400), /* bottom-left */
+        calc(100% + 0.15rem) calc(100% + 0.15rem) 0 var(--sage-400); /* bottom-right */
+}
+
+.collage-preview::after {
+    /* Hide the after element since we're using box-shadow */
+    display: none;
 }
 
 .polaroid-preview {
