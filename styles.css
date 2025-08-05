@@ -1076,7 +1076,8 @@ body {
     }
     
     .toast-container {
-        top: 1rem;
+        top: auto;
+        bottom: 1rem;
         right: 1rem;
         left: 1rem;
     }

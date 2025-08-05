@@ -186,6 +186,13 @@ class PhotoboothApp {
         document.addEventListener('keydown', () => this.resetCameraInactivityTimer());
     }
 
+    loadCustomFrames() {
+        // Placeholder for custom frames functionality
+        // This could load frames from a frames folder in the future
+        this.customFrames = [];
+        console.log('Custom frames loaded (placeholder)');
+    }
+
     initTypingAnimation() {
         const titleElement = document.querySelector('.title');
         if (!titleElement) {
@@ -609,112 +616,67 @@ class PhotoboothApp {
     }
 
     drawVideoToCanvas() {
-        // Device-aware video drawing with proper aspect ratio handling
+        // Device-aware video drawing with center cropping to exact frame aspect ratio
         const videoAspectRatio = this.video.videoWidth / this.video.videoHeight;
         const canvasAspectRatio = this.canvas.width / this.canvas.height;
         
-        console.log('📐 Drawing video:', {
+        console.log('📐 Drawing video with precision center crop:', {
             videoSize: `${this.video.videoWidth}x${this.video.videoHeight}`,
             canvasSize: `${this.canvas.width}x${this.canvas.height}`,
-            videoAspectRatio: videoAspectRatio.toFixed(2),
-            canvasAspectRatio: canvasAspectRatio.toFixed(2),
+            videoAspectRatio: videoAspectRatio.toFixed(3),
+            canvasAspectRatio: canvasAspectRatio.toFixed(3),
             deviceType: this.deviceInfo
         });
         
-        let drawWidth, drawHeight, drawX, drawY;
+        let sourceX, sourceY, sourceWidth, sourceHeight;
+        let destX = 0, destY = 0;
+        let destWidth = this.canvas.width, destHeight = this.canvas.height;
         
-        // Different fitting strategies based on device and frame type
+        // Special handling for polaroid - always crop to perfect square from center
         if (this.currentFrame === 'polaroid') {
-            // Polaroid should always be square - crop to fit
             const minDimension = Math.min(this.video.videoWidth, this.video.videoHeight);
-            drawWidth = this.canvas.width;
-            drawHeight = this.canvas.height;
-            drawX = 0;
-            drawY = 0;
-            
-            // For polaroid, we'll crop the video to square first
-            this.ctx.save();
-            if (this.mirrorCamera) {
-                this.ctx.scale(-1, 1);
-                this.ctx.drawImage(
-                    this.video,
-                    (this.video.videoWidth - minDimension) / 2, // Source crop X
-                    (this.video.videoHeight - minDimension) / 2, // Source crop Y
-                    minDimension, // Source crop width
-                    minDimension, // Source crop height
-                    -drawWidth, // Destination X (flipped)
-                    drawY, // Destination Y
-                    drawWidth, // Destination width
-                    drawHeight // Destination height
-                );
-            } else {
-                this.ctx.drawImage(
-                    this.video,
-                    (this.video.videoWidth - minDimension) / 2,
-                    (this.video.videoHeight - minDimension) / 2,
-                    minDimension,
-                    minDimension,
-                    drawX,
-                    drawY,
-                    drawWidth,
-                    drawHeight
-                );
-            }
-            this.ctx.restore();
-            return;
-        }
-        
-        // For mobile devices (portrait), we need special handling
-        if (this.deviceInfo && this.deviceInfo.isMobile && videoAspectRatio < 1) {
-            // Mobile portrait mode - video is taller than wide
-            if (this.currentFrame === 'strip') {
-                // Strip frame is already portrait, fit by width
-                drawWidth = this.canvas.width;
-                drawHeight = drawWidth / videoAspectRatio;
-                drawX = 0;
-                drawY = (this.canvas.height - drawHeight) / 2;
-            } else {
-                // Other frames - maintain aspect ratio, fit within frame
-                if (videoAspectRatio > canvasAspectRatio) {
-                    // Video wider relative to canvas - fit by height
-                    drawHeight = this.canvas.height;
-                    drawWidth = drawHeight * videoAspectRatio;
-                    drawX = (this.canvas.width - drawWidth) / 2;
-                    drawY = 0;
-                } else {
-                    // Video taller relative to canvas - fit by width
-                    drawWidth = this.canvas.width;
-                    drawHeight = drawWidth / videoAspectRatio;
-                    drawX = 0;
-                    drawY = (this.canvas.height - drawHeight) / 2;
-                }
-            }
+            sourceX = (this.video.videoWidth - minDimension) / 2;
+            sourceY = (this.video.videoHeight - minDimension) / 2;
+            sourceWidth = minDimension;
+            sourceHeight = minDimension;
         } else {
-            // Desktop/tablet or landscape mode - standard aspect ratio handling
+            // For all other frames, crop to exact canvas aspect ratio from center
             if (videoAspectRatio > canvasAspectRatio) {
-                // Video is wider relative to canvas - fit by height, center horizontally
-                drawHeight = this.canvas.height;
-                drawWidth = drawHeight * videoAspectRatio;
-                drawX = (this.canvas.width - drawWidth) / 2;
-                drawY = 0;
+                // Video is wider than needed - crop sides to match canvas ratio exactly
+                sourceHeight = this.video.videoHeight;
+                sourceWidth = sourceHeight * canvasAspectRatio; // Exact aspect ratio match
+                sourceX = (this.video.videoWidth - sourceWidth) / 2; // Center horizontally
+                sourceY = 0;
             } else {
-                // Video is taller relative to canvas - fit by width, center vertically
-                drawWidth = this.canvas.width;
-                drawHeight = drawWidth / videoAspectRatio;
-                drawX = 0;
-                drawY = (this.canvas.height - drawHeight) / 2;
+                // Video is taller than needed - crop top/bottom to match canvas ratio exactly
+                sourceWidth = this.video.videoWidth;
+                sourceHeight = sourceWidth / canvasAspectRatio; // Exact aspect ratio match
+                sourceX = 0;
+                sourceY = (this.video.videoHeight - sourceHeight) / 2; // Center vertically
             }
         }
         
-        console.log('🎨 Draw dimensions:', { drawX, drawY, drawWidth, drawHeight });
+        console.log('🎨 Precision crop dimensions:', { 
+            source: `${sourceX.toFixed(1)}, ${sourceY.toFixed(1)}, ${sourceWidth.toFixed(1)}x${sourceHeight.toFixed(1)}`,
+            dest: `${destX}, ${destY}, ${destWidth}x${destHeight}`,
+            cropRatio: (sourceWidth / sourceHeight).toFixed(3)
+        });
         
-        // Draw with proper mirroring
+        // Draw with proper mirroring and precision center cropping
         this.ctx.save();
         if (this.mirrorCamera) {
             this.ctx.scale(-1, 1); // Flip horizontally to un-mirror
-            this.ctx.drawImage(this.video, -drawX - drawWidth, drawY, drawWidth, drawHeight);
+            this.ctx.drawImage(
+                this.video,
+                sourceX, sourceY, sourceWidth, sourceHeight, // Source crop area (exact ratio)
+                -destWidth, destY, destWidth, destHeight // Destination (flipped)
+            );
         } else {
-            this.ctx.drawImage(this.video, drawX, drawY, drawWidth, drawHeight);
+            this.ctx.drawImage(
+                this.video,
+                sourceX, sourceY, sourceWidth, sourceHeight, // Source crop area (exact ratio)
+                destX, destY, destWidth, destHeight // Destination
+            );
         }
         this.ctx.restore();
     }
@@ -734,7 +696,7 @@ class PhotoboothApp {
                 const tempCanvas = document.createElement('canvas');
                 const tempCtx = tempCanvas.getContext('2d');
                 
-                // Set canvas size based on desired output (maintaining video aspect ratio)
+                // Set canvas size based on desired output
                 const videoAspectRatio = this.video.videoWidth / this.video.videoHeight;
                 
                 if (this.deviceInfo && this.deviceInfo.isMobile && videoAspectRatio < 1) {
@@ -747,31 +709,45 @@ class PhotoboothApp {
                     tempCanvas.height = 480;
                 }
 
-                // Draw video with proper aspect ratio fitting
+                // Use precision center cropping to match canvas aspect ratio exactly
                 const canvasAspectRatio = tempCanvas.width / tempCanvas.height;
-                let drawWidth, drawHeight, drawX, drawY;
+                let sourceX, sourceY, sourceWidth, sourceHeight;
                 
                 if (videoAspectRatio > canvasAspectRatio) {
-                    // Video wider - fit by height
-                    drawHeight = tempCanvas.height;
-                    drawWidth = drawHeight * videoAspectRatio;
-                    drawX = (tempCanvas.width - drawWidth) / 2;
-                    drawY = 0;
+                    // Video is wider - crop sides to exact canvas ratio
+                    sourceHeight = this.video.videoHeight;
+                    sourceWidth = sourceHeight * canvasAspectRatio; // Exact ratio match
+                    sourceX = (this.video.videoWidth - sourceWidth) / 2; // Center crop
+                    sourceY = 0;
                 } else {
-                    // Video taller - fit by width
-                    drawWidth = tempCanvas.width;
-                    drawHeight = drawWidth / videoAspectRatio;
-                    drawX = 0;
-                    drawY = (tempCanvas.height - drawHeight) / 2;
+                    // Video is taller - crop top/bottom to exact canvas ratio
+                    sourceWidth = this.video.videoWidth;
+                    sourceHeight = sourceWidth / canvasAspectRatio; // Exact ratio match
+                    sourceX = 0;
+                    sourceY = (this.video.videoHeight - sourceHeight) / 2; // Center crop
                 }
 
-                // Draw video frame (un-mirror if camera is mirrored)
+                console.log('📸 Single shot crop:', {
+                    canvasSize: `${tempCanvas.width}x${tempCanvas.height}`,
+                    sourceArea: `${sourceX.toFixed(1)}, ${sourceY.toFixed(1)}, ${sourceWidth.toFixed(1)}x${sourceHeight.toFixed(1)}`,
+                    aspectRatio: (sourceWidth / sourceHeight).toFixed(3)
+                });
+
+                // Draw video frame with precision center cropping (un-mirror if camera is mirrored)
                 tempCtx.save();
                 if (this.mirrorCamera) {
                     tempCtx.scale(-1, 1); // Flip horizontally to un-mirror
-                    tempCtx.drawImage(this.video, -drawX - drawWidth, drawY, drawWidth, drawHeight);
+                    tempCtx.drawImage(
+                        this.video,
+                        sourceX, sourceY, sourceWidth, sourceHeight, // Source crop (exact ratio)
+                        -tempCanvas.width, 0, tempCanvas.width, tempCanvas.height // Destination (flipped)
+                    );
                 } else {
-                    tempCtx.drawImage(this.video, drawX, drawY, drawWidth, drawHeight);
+                    tempCtx.drawImage(
+                        this.video,
+                        sourceX, sourceY, sourceWidth, sourceHeight, // Source crop (exact ratio)
+                        0, 0, tempCanvas.width, tempCanvas.height // Destination
+                    );
                 }
                 tempCtx.restore();
 
@@ -1114,45 +1090,39 @@ class PhotoboothApp {
             this.ctx.fillStyle = 'rgba(0,0,0,0.3)';
             this.ctx.fillRect(photoX - 4, y - 4, photoWidth + 8, photoHeight + 8);
             
-            // Calculate aspect ratio preservation for the photo
+            // Use precision center cropping to match photo frame ratio exactly
             const imgAspectRatio = img.width / img.height;
             const frameAspectRatio = photoWidth / photoHeight;
             
-            let drawWidth, drawHeight, drawX, drawY;
+            let sourceX, sourceY, sourceWidth, sourceHeight;
             
-            // Always fit the image within the frame bounds
             if (imgAspectRatio > frameAspectRatio) {
-                // Image is wider - fit by height, center horizontally
-                drawHeight = photoHeight;
-                drawWidth = drawHeight * imgAspectRatio;
-                drawX = photoX + (photoWidth - drawWidth) / 2;
-                drawY = y;
-                
-                // If still too wide, fit by width instead
-                if (drawWidth > photoWidth) {
-                    drawWidth = photoWidth;
-                    drawHeight = drawWidth / imgAspectRatio;
-                    drawX = photoX;
-                    drawY = y + (photoHeight - drawHeight) / 2;
-                }
+                // Image is wider than frame - crop sides to exact frame ratio
+                sourceHeight = img.height;
+                sourceWidth = sourceHeight * frameAspectRatio; // Exact frame ratio match
+                sourceX = (img.width - sourceWidth) / 2; // Center horizontally
+                sourceY = 0;
             } else {
-                // Image is taller - fit by width, center vertically
-                drawWidth = photoWidth;
-                drawHeight = drawWidth / imgAspectRatio;
-                drawX = photoX;
-                drawY = y + (photoHeight - drawHeight) / 2;
-                
-                // If still too tall, fit by height instead
-                if (drawHeight > photoHeight) {
-                    drawHeight = photoHeight;
-                    drawWidth = drawHeight * imgAspectRatio;
-                    drawX = photoX + (photoWidth - drawWidth) / 2;
-                    drawY = y;
-                }
+                // Image is taller than frame - crop top/bottom to exact frame ratio
+                sourceWidth = img.width;
+                sourceHeight = sourceWidth / frameAspectRatio; // Exact frame ratio match
+                sourceX = 0;
+                sourceY = (img.height - sourceHeight) / 2; // Center vertically
             }
             
-            // Draw the actual photo with proper aspect ratio and bounds checking
-            this.ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+            console.log(`🎞️ Film strip photo ${index + 1} crop:`, {
+                frameSize: `${photoWidth.toFixed(1)}x${photoHeight.toFixed(1)}`,
+                sourceArea: `${sourceX.toFixed(1)}, ${sourceY.toFixed(1)}, ${sourceWidth.toFixed(1)}x${sourceHeight.toFixed(1)}`,
+                cropRatio: (sourceWidth / sourceHeight).toFixed(3),
+                frameRatio: frameAspectRatio.toFixed(3)
+            });
+            
+            // Draw the photo with precision center cropping (fills frame exactly)
+            this.ctx.drawImage(
+                img,
+                sourceX, sourceY, sourceWidth, sourceHeight, // Source crop area (exact frame ratio)
+                photoX, y, photoWidth, photoHeight // Destination frame
+            );
         });
 
         // Add film strip branding at bottom
@@ -1367,12 +1337,43 @@ class PhotoboothApp {
             this.ctx.fillStyle = 'rgba(0,0,0,0.1)';
             this.ctx.fillRect(pos.x + 2, pos.y + 2, photoWidth + 5, photoHeight + 5);
             
-            // Draw the photo (with slight rotation for variety)
+            // Use precision center cropping to match photo slot ratio exactly
+            const tempAspectRatio = tempCanvas.width / tempCanvas.height;
+            const photoAspectRatio = photoWidth / photoHeight;
+            
+            let sourceX, sourceY, sourceWidth, sourceHeight;
+            
+            if (tempAspectRatio > photoAspectRatio) {
+                // Image is wider than photo slot - crop sides to exact slot ratio
+                sourceHeight = tempCanvas.height;
+                sourceWidth = sourceHeight * photoAspectRatio; // Exact slot ratio match
+                sourceX = (tempCanvas.width - sourceWidth) / 2; // Center horizontally
+                sourceY = 0;
+            } else {
+                // Image is taller than photo slot - crop top/bottom to exact slot ratio
+                sourceWidth = tempCanvas.width;
+                sourceHeight = sourceWidth / photoAspectRatio; // Exact slot ratio match
+                sourceX = 0;
+                sourceY = (tempCanvas.height - sourceHeight) / 2; // Center vertically
+            }
+            
+            console.log(`🖼️ Collage photo ${index + 1} crop:`, {
+                slotSize: `${photoWidth.toFixed(1)}x${photoHeight.toFixed(1)}`,
+                sourceArea: `${sourceX.toFixed(1)}, ${sourceY.toFixed(1)}, ${sourceWidth.toFixed(1)}x${sourceHeight.toFixed(1)}`,
+                cropRatio: (sourceWidth / sourceHeight).toFixed(3),
+                slotRatio: photoAspectRatio.toFixed(3)
+            });
+            
+            // Draw the photo with precision center cropping and slight rotation for variety
             this.ctx.save();
             this.ctx.translate(pos.x + photoWidth/2, pos.y + photoHeight/2);
             const rotation = (index - 1.5) * 0.02; // Slight rotation variation
             this.ctx.rotate(rotation);
-            this.ctx.drawImage(tempCanvas, -photoWidth/2, -photoHeight/2, photoWidth, photoHeight);
+            this.ctx.drawImage(
+                tempCanvas,
+                sourceX, sourceY, sourceWidth, sourceHeight, // Source crop (exact slot ratio)
+                -photoWidth/2, -photoHeight/2, photoWidth, photoHeight // Destination
+            );
             this.ctx.restore();
         });
     }
