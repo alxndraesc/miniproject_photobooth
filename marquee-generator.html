@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Marquee Generator</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #f0f0f0; }
+        canvas { border: 1px solid #ccc; background: white; }
+        #download { margin-top: 10px; padding: 10px 20px; background: #4CAF50; color: white; border: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h2>Retro Marquee Sign Generator</h2>
+    <canvas id="marquee" width="1200" height="120"></canvas>
+    <br>
+    <button id="download">Download PNG</button>
+    <button id="download-gif">Download GIF (Animated Flicker)</button>
+
+    <script>
+        const canvas = document.getElementById('marquee');
+        const ctx = canvas.getContext('2d');
+
+        // Load gif.js and ensure it's loaded before enabling GIF button
+        const gifScript = document.createElement('script');
+        gifScript.src = 'gif.js';
+        document.head.appendChild(gifScript);
+
+        // Helper to get the correct workerScript path
+        function getWorkerScriptPath() {
+            // Try multiple possible paths
+            const possiblePaths = [
+                './gif.worker.js',
+                'gif.worker.js', 
+                window.location.href.replace('marquee-generator.html', 'gif.worker.js')
+            ];
+            return possiblePaths[0]; // Use the first one, others as fallbacks
+        }
+
+        // Disable GIF button until gif.js is loaded
+        const gifBtn = document.getElementById('download-gif');
+        gifBtn.disabled = true;
+        gifBtn.textContent = 'Loading GIF Library...';
+        
+        gifScript.onload = function() {
+            console.log('gif.js loaded successfully');
+            console.log('GIF constructor available:', typeof window.GIF);
+            console.log('Worker script path:', getWorkerScriptPath());
+            gifBtn.disabled = false;
+            gifBtn.textContent = 'Download GIF (Animated Flicker)';
+        };
+        
+        gifScript.onerror = function() {
+            console.error('Failed to load gif.js');
+            gifBtn.textContent = 'GIF Library Error';
+        };
+
+        // Colors matching your CSS palette
+        const bgColor = '#fdf8f0';  // beige-100
+        const borderColor = '#8b6f4e';  // brown
+        const bulbColors = ['#f5ead7', '#e5c7a7', '#fffbe8', '#d7e5d0'];
+
+        function drawRoundedRect(x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        }
+
+
+        function drawMarquee(bulbStates) {
+            // Clear
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Main background
+            ctx.fillStyle = bgColor;
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = 4; // Reduced from 8 to make border thinner
+            drawRoundedRect(4, 4, 1192, 112, 8);
+            ctx.fill();
+            ctx.stroke();
+            // Inner border
+            ctx.strokeStyle = '#b8d1a6';
+            ctx.lineWidth = 1.5; // Reduced from 2 to make border thinner
+            drawRoundedRect(20, 20, 1160, 80, 4);
+            ctx.stroke();
+            // Bulb params
+            const bulbSize = 10;
+            const bulbSpacing = 50;
+            // Top row bulbs
+            for (let i = 0, x = bulbSpacing; x < 1200 - bulbSpacing; x += bulbSpacing, i++) {
+                const colorIndex = Math.floor(x/bulbSpacing) % bulbColors.length;
+                const color = bulbColors[colorIndex];
+                const on = bulbStates.top[i];
+                ctx.save();
+                ctx.shadowBlur = on ? 18 : 0;
+                ctx.shadowColor = color;
+                ctx.globalAlpha = on ? 1 : 0.3;
+                ctx.fillStyle = color;
+                ctx.strokeStyle = borderColor;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(x, 15, bulbSize/2, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+                // Highlight
+                ctx.save();
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = on ? 1 : 0.2;
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.beginPath();
+                ctx.arc(x-1, 13, bulbSize/4, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.restore();
+            }
+            // Bottom row bulbs
+            for (let i = 0, x = bulbSpacing; x < 1200 - bulbSpacing; x += bulbSpacing, i++) {
+                const colorIndex = Math.floor(x/bulbSpacing) % bulbColors.length;
+                const color = bulbColors[colorIndex];
+                const on = bulbStates.bottom[i];
+                ctx.save();
+                ctx.shadowBlur = on ? 18 : 0;
+                ctx.shadowColor = color;
+                ctx.globalAlpha = on ? 1 : 0.3;
+                ctx.fillStyle = color;
+                ctx.strokeStyle = borderColor;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(x, 105, bulbSize/2, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+                ctx.save();
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = on ? 1 : 0.2;
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.beginPath();
+                ctx.arc(x-1, 103, bulbSize/4, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.restore();
+            }
+            // Left side bulbs
+            for (let i = 0, y = 40; y <= 80; y += 20, i++) {
+                const colorIndex = Math.floor(y/20) % bulbColors.length;
+                const color = bulbColors[colorIndex];
+                const on = bulbStates.left[i];
+                ctx.save();
+                ctx.shadowBlur = on ? 18 : 0;
+                ctx.shadowColor = color;
+                ctx.globalAlpha = on ? 1 : 0.3;
+                ctx.fillStyle = color;
+                ctx.strokeStyle = borderColor;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(15, y, bulbSize/2, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+                ctx.save();
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = on ? 1 : 0.2;
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.beginPath();
+                ctx.arc(13, y-1, bulbSize/4, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.restore();
+            }
+            // Right side bulbs
+            for (let i = 0, y = 40; y <= 80; y += 20, i++) {
+                const colorIndex = Math.floor(y/20) % bulbColors.length;
+                const color = bulbColors[colorIndex];
+                const on = bulbStates.right[i];
+                ctx.save();
+                ctx.shadowBlur = on ? 18 : 0;
+                ctx.shadowColor = color;
+                ctx.globalAlpha = on ? 1 : 0.3;
+                ctx.fillStyle = color;
+                ctx.strokeStyle = borderColor;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(1185, y, bulbSize/2, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+                ctx.save();
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = on ? 1 : 0.2;
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.beginPath();
+                ctx.arc(1183, y-1, bulbSize/4, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.restore();
+            }
+            // Add vintage texture overlay
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const noise = (Math.random() - 0.5) * 10;
+                data[i] = Math.max(0, Math.min(255, data[i] + noise));
+                data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise));
+                data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise));
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        // Helper to get random bulb states for flicker
+        function randomBulbStates() {
+            const top = Array(22).fill(0).map(() => Math.random() > 0.2);
+            const bottom = Array(22).fill(0).map(() => Math.random() > 0.2);
+            const left = Array(3).fill(0).map(() => Math.random() > 0.2);
+            const right = Array(3).fill(0).map(() => Math.random() > 0.2);
+            return { top, bottom, left, right };
+        }
+
+        // Draw static marquee (all bulbs on)
+        function drawStaticMarquee() {
+            const on = true;
+            drawMarquee({
+                top: Array(22).fill(on),
+                bottom: Array(22).fill(on),
+                left: Array(3).fill(on),
+                right: Array(3).fill(on)
+            });
+        }
+
+        // Initial static draw
+        drawStaticMarquee();
+
+        // Add vintage texture overlay
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        for (let i = 0; i < data.length; i += 4) {
+            // Add subtle noise
+            const noise = (Math.random() - 0.5) * 10;
+            data[i] = Math.max(0, Math.min(255, data[i] + noise));     // Red
+            data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise)); // Green
+            data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise)); // Blue
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+
+        // Download functionality
+
+        document.getElementById('download').addEventListener('click', function() {
+            drawStaticMarquee();
+            const link = document.createElement('a');
+            link.download = 'marquee-sign.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        });
+
+        // Download GIF functionality
+        gifBtn.addEventListener('click', function() {
+            if (!window.GIF) {
+                alert('gif.js not loaded. Please ensure gif.js is in the same folder.');
+                return;
+            }
+            
+            console.log('Starting GIF generation...');
+            gifBtn.disabled = true;
+            const originalText = gifBtn.textContent;
+            gifBtn.textContent = 'Rendering GIF...';
+            
+            try {
+                const gif = new window.GIF({
+                    workers: 1, // Reduced workers for better compatibility
+                    quality: 15, // Slightly lower quality for better performance
+                    width: canvas.width,
+                    height: canvas.height,
+                    workerScript: getWorkerScriptPath(),
+                    debug: true // Enable debug mode
+                });
+                
+                console.log('GIF object created');
+                
+                const frames = 12; // Reduced frames for faster generation
+                for (let i = 0; i < frames; i++) {
+                    const flicker = (i % 3 === 0);
+                    let states;
+                    if (flicker) {
+                        states = randomBulbStates();
+                    } else {
+                        states = {
+                            top: Array(22).fill(true),
+                            bottom: Array(22).fill(true),
+                            left: Array(3).fill(true),
+                            right: Array(3).fill(true)
+                        };
+                    }
+                    drawMarquee(states);
+                    gif.addFrame(ctx, {copy: true, delay: 80}); // Slightly longer delay
+                    console.log(`Added frame ${i + 1}/${frames}`);
+                }
+                
+                // Restore static
+                drawStaticMarquee();
+                
+                gif.on('finished', function(blob) {
+                    console.log('GIF generation completed');
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'marquee-sign.gif';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 2000);
+                    gifBtn.textContent = originalText;
+                    gifBtn.disabled = false;
+                });
+                
+                gif.on('progress', function(p) {
+                    gifBtn.textContent = `Rendering... ${Math.round(p * 100)}%`;
+                });
+                
+                gif.render();
+                
+            } catch (error) {
+                console.error('Error creating GIF:', error);
+                alert('Error creating GIF: ' + error.message);
+                gifBtn.textContent = originalText;
+                gifBtn.disabled = false;
+            }
+        });
+
+        console.log('Marquee sign generated! Click download to save as PNG.');
+    </script>
+</body>
+</html>

@@ -52,7 +52,10 @@ class PhotoboothApp {
         console.log('🎛️ Setting up event listeners...');
         this.bindEvents();
         
-        console.log('🗑️ Clearing photos for privacy...');
+        console.log('� Ensuring previous camera streams are stopped...');
+        this.forceStopAllCameraStreams(); // Stop any lingering camera streams first
+        
+        console.log('�🗑️ Clearing photos for privacy...');
         this.clearPhotosOnPageLoad(); // Clear photos for privacy on each page load
         
         console.log('🖼️ Loading custom frames...');
@@ -93,6 +96,53 @@ class PhotoboothApp {
         }
     }
 
+    async forceStopAllCameraStreams() {
+        try {
+            // Stop any existing stream on this instance
+            if (this.stream) {
+                this.stream.getTracks().forEach(track => {
+                    track.stop();
+                    console.log('🛑 Stopped existing camera track');
+                });
+                this.stream = null;
+            }
+
+            // Try to get and immediately stop any active camera streams
+            // This helps clean up streams that might be lingering from previous page loads
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                try {
+                    const testStream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { facingMode: 'user' }, 
+                        audio: false 
+                    });
+                    testStream.getTracks().forEach(track => {
+                        track.stop();
+                        console.log('🧹 Cleaned up lingering camera stream');
+                    });
+                } catch (e) {
+                    // This is expected if no camera access or permission denied
+                    console.log('🔒 No lingering camera streams to clean up');
+                }
+            }
+
+            // Reset video element
+            if (this.video) {
+                this.video.srcObject = null;
+                this.video.classList.remove('active');
+            }
+
+            // Hide privacy indicator
+            const privacyIndicator = document.getElementById('privacy-indicator');
+            if (privacyIndicator) {
+                privacyIndicator.classList.add('hidden');
+            }
+
+            console.log('✅ Camera cleanup complete');
+        } catch (error) {
+            console.log('ℹ️ Camera cleanup completed (some steps skipped):', error.message);
+        }
+    }
+
     getCameraConstraints() {
         // Ensure deviceInfo is available, detect if not
         if (!this.deviceInfo) {
@@ -100,38 +150,35 @@ class PhotoboothApp {
             this.detectDeviceType();
         }
         
-        // Provide different camera constraints based on device type
+        // Simplified, faster camera constraints
         const baseConstraints = {
             video: {
                 facingMode: 'user',
-                frameRate: { ideal: 30, max: 60 }
+                frameRate: { ideal: 30, max: 30 } // Limit framerate for better performance
             },
             audio: false
         };
 
         if (this.deviceInfo && this.deviceInfo.isMobile) {
-            // Mobile devices - prioritize compatibility
+            // Mobile devices - lower resolution for speed
             baseConstraints.video = {
                 ...baseConstraints.video,
-                width: { ideal: 1280, min: 640, max: 1920 },
-                height: { ideal: 720, min: 480, max: 1080 },
-                aspectRatio: { ideal: 16/9 }
+                width: { ideal: 640, max: 1280 },
+                height: { ideal: 480, max: 720 }
             };
         } else if (this.deviceInfo && this.deviceInfo.isTablet) {
-            // Tablets - higher quality but still mobile-optimized
+            // Tablets - moderate resolution
             baseConstraints.video = {
                 ...baseConstraints.video,
-                width: { ideal: 1920, min: 1280, max: 2560 },
-                height: { ideal: 1080, min: 720, max: 1440 },
-                aspectRatio: { ideal: 16/9 }
+                width: { ideal: 1280, max: 1920 },
+                height: { ideal: 720, max: 1080 }
             };
         } else {
-            // Desktop/Laptop - highest quality
+            // Desktop/Laptop - reasonable quality, not maximum
             baseConstraints.video = {
                 ...baseConstraints.video,
-                width: { ideal: 1920, min: 1280, max: 3840 },
-                height: { ideal: 1080, min: 720, max: 2160 },
-                aspectRatio: { ideal: 16/9 }
+                width: { ideal: 1280, max: 1920 },
+                height: { ideal: 720, max: 1080 }
             };
         }
 
@@ -319,23 +366,22 @@ class PhotoboothApp {
             console.log('🎥 Using camera constraints:', constraints);
             
             try {
-                console.log('📞 Requesting camera access with ideal constraints...');
+                console.log('📞 Requesting camera access with optimized constraints...');
                 this.stream = await navigator.mediaDevices.getUserMedia(constraints);
-                console.log('✅ Camera access granted with ideal constraints');
+                console.log('✅ Camera access granted with optimized constraints');
             } catch (constraintError) {
-                console.warn('⚠️ Ideal constraints failed, trying fallback:', constraintError);
-                // Fallback to basic constraints
+                console.warn('⚠️ Optimized constraints failed, trying basic fallback:', constraintError);
+                // Very basic fallback constraints for maximum compatibility
                 const fallbackConstraints = {
                     video: {
-                        facingMode: 'user',
-                        width: { ideal: 640 },
-                        height: { ideal: 480 }
+                        facingMode: 'user'
+                        // No resolution constraints for fastest startup
                     },
                     audio: false
                 };
-                console.log('🔄 Trying fallback constraints:', fallbackConstraints);
+                console.log('🔄 Trying basic fallback constraints:', fallbackConstraints);
                 this.stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
-                console.log('✅ Camera access granted with fallback constraints');
+                console.log('✅ Camera access granted with basic constraints');
             }
 
             console.log('🎬 Setting video source...');
@@ -352,10 +398,10 @@ class PhotoboothApp {
                     reject(error);
                 };
                 
-                // Timeout after 10 seconds
+                // Timeout after 5 seconds
                 setTimeout(() => {
                     reject(new Error('Video loading timeout'));
-                }, 10000);
+                }, 5000);
             });
             
             this.video.classList.add('active');
@@ -1702,9 +1748,23 @@ document.addEventListener('DOMContentLoaded', () => {
     window.photoboothApp = new PhotoboothApp();
 });
 
-// Cleanup on page unload
+// Cleanup on page unload - multiple event listeners for better coverage
 window.addEventListener('beforeunload', () => {
     if (window.photoboothApp) {
         window.photoboothApp.destroy();
+    }
+});
+
+window.addEventListener('unload', () => {
+    if (window.photoboothApp) {
+        window.photoboothApp.destroy();
+    }
+});
+
+// Additional cleanup for page visibility changes
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden && window.photoboothApp && window.photoboothApp.stream) {
+        console.log('🙈 Page hidden, stopping camera for privacy');
+        window.photoboothApp.stopCamera();
     }
 });

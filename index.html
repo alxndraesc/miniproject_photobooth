@@ -9,14 +9,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Anonymous+Pro:wght@400;700&family=Special+Elite&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="app">
         <!-- Header -->
-        <header class="header">
-            <h1 class="title">Mood – Classic. Retro. Pop.</h1>
-            <p class="subtitle">[ from the arch(r)ives ]</p>
-            <div class="title-divider"></div>
+        <header class="header booth-header">
+            <div class="booth-sign-full">love, in snapshots</div>
         </header>
 
         <br>
@@ -35,7 +34,6 @@
                             <!-- Camera Placeholder -->
                             <div id="camera-placeholder" class="camera-placeholder">
                                 <div class="placeholder-content">
-                                    <p class="placeholder-title">CAMERA READY</p>
                                     <p class="placeholder-subtitle">Click "Start Camera" to begin</p>
                                 </div>
                             </div>
@@ -61,17 +59,36 @@
                             <button id="capture-photo" class="btn btn-secondary" disabled>📸 CAPTURE</button>
                             <button id="mirror-toggle" class="btn btn-tertiary active">🪞 MIRROR ON</button>
                         </div>
-                        
-                        <!-- Download Section -->
-                        <div class="download-section">
-                            <button id="download-photo" class="btn btn-download" disabled>
-                                💾 DOWNLOAD PHOTO
-                            </button>
-                            <p class="download-note">Photos save directly to your device</p>
-                            <p class="privacy-note">🔒 Photos are cleared when page is refreshed for your privacy</p>
+                    </div>
+                </div>
+
+                <!-- Photo Output Section (Download + Photomat) -->
+                <div class="photo-output-section">
+                    <!-- Download Section - Sandwich Layout -->
+                    <div class="photo-download-section">
+                        <p class="download-note">Photos save directly to your device</p>
+                        <button id="download-photo" class="btn btn-download" title="Download Photo" disabled>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        </button>
+                        <p class="privacy-note">🔒 Photos are cleared when page is refreshed for your privacy</p>
+                    </div>
+
+                    <!-- Photomat Section - Fixed Layout -->
+                    <div class="photomat-section">
+                        <div class="output-label">Photomat</div>
+                        <div class="photobooth-slot-bg">
+                            <div class="photobooth-slot">
+                                <div id="photo-preview" class="photo-preview">
+                                    <div class="preview-placeholder">
+                                        <div class="placeholder-icon">📷</div>
+                                        <p>No photo taken yet</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
+        </div>
 
                 <!-- Controls Panel -->
                 <div class="controls-panel">
@@ -79,26 +96,36 @@
                     <!-- Filter Presets -->
                     <div class="control-section">
                         <h3 class="section-title">[ FILM PRESETS ]</h3>
-                        <div class="filter-grid">
-                            <button class="filter-btn active" data-filter="none">
-                                <div class="filter-name">ORIGINAL</div>
-                                <div class="filter-desc">No filter</div>
+                        <div class="filter-thumbs-grid">
+                            <button class="filter-btn active" data-filter="none" title="Original - No filter">
+                                <div class="filter-thumb">
+                                    <img src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=facearea&w=170&h=170&facepad=2" alt="Original" class="filter-thumb-img filter-none">
+                                </div>
+                                <span class="filter-name">Original</span>
                             </button>
-                            <button class="filter-btn" data-filter="monomuse">
-                                <div class="filter-name">MONOMUSE</div>
-                                <div class="filter-desc">Artistic grayscale</div>
+                            <button class="filter-btn" data-filter="monomuse" title="Monomuse - Artistic grayscale">
+                                <div class="filter-thumb">
+                                    <img src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=facearea&w=170&h=170&facepad=2" alt="Monomuse" class="filter-thumb-img filter-monomuse">
+                                </div>
+                                <span class="filter-name">Monomuse</span>
                             </button>
-                            <button class="filter-btn" data-filter="retrograde">
-                                <div class="filter-name">RETROGRADE</div>
-                                <div class="filter-desc">Vintage warmth</div>
+                            <button class="filter-btn" data-filter="retrograde" title="Retrograde - Vintage warmth">
+                                <div class="filter-thumb">
+                                    <img src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=facearea&w=170&h=170&facepad=2" alt="Retrograde" class="filter-thumb-img filter-retrograde">
+                                </div>
+                                <span class="filter-name">Retrograde</span>
                             </button>
-                            <button class="filter-btn" data-filter="vivapop">
-                                <div class="filter-name">VIVAPOP</div>
-                                <div class="filter-desc">Vibrant colors</div>
+                            <button class="filter-btn" data-filter="vivapop" title="Vivapop - Vibrant colors">
+                                <div class="filter-thumb">
+                                    <img src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=facearea&w=170&h=170&facepad=2" alt="Vivapop" class="filter-thumb-img filter-vivapop">
+                                </div>
+                                <span class="filter-name">Vivapop</span>
                             </button>
-                            <button class="filter-btn" data-filter="solshine">
-                                <div class="filter-name">SOLSHINE</div>
-                                <div class="filter-desc">Bright & sunny</div>
+                            <button class="filter-btn" data-filter="solshine" title="Solshine - Bright & sunny">
+                                <div class="filter-thumb">
+                                    <img src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=facearea&w=170&h=170&facepad=2" alt="Solshine" class="filter-thumb-img filter-solshine">
+                                </div>
+                                <span class="filter-name">Solshine</span>
                             </button>
                         </div>
                     </div>
@@ -109,19 +136,38 @@
                         <div class="frame-grid">
                             <button class="frame-btn active" data-frame="strip">
                                 <div class="frame-preview">
-                                    <img src="icons/film-strip.png" alt="Film Strip" class="frame-icon">
+                                    <div class="frame-icon frame-icon-strip">
+                                        <div class="film-perforation"></div>
+                                        <div class="film-perforation"></div>
+                                        <div class="film-perforation"></div>
+                                        <div class="film-frame"></div>
+                                        <div class="film-frame"></div>
+                                        <div class="film-frame"></div>
+                                    </div>
                                 </div>
                                 <div class="frame-name">STRIP</div>
                             </button>
                             <button class="frame-btn" data-frame="collage">
                                 <div class="frame-preview">
-                                    <img src="icons/grid.png" alt="Collage Grid" class="frame-icon">
+                                    <div class="frame-icon frame-icon-collage">
+                                        <div class="collage-grid">
+                                            <div class="grid-cell"></div>
+                                            <div class="grid-cell"></div>
+                                            <div class="grid-cell"></div>
+                                            <div class="grid-cell"></div>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="frame-name">COLLAGE</div>
                             </button>
                             <button class="frame-btn" data-frame="polaroid">
                                 <div class="frame-preview">
-                                    <img src="icons/polaroid.png" alt="Polaroid" class="frame-icon">
+                                    <div class="frame-icon frame-icon-polaroid">
+                                        <div class="polaroid-frame">
+                                            <div class="polaroid-photo"></div>
+                                            <div class="polaroid-text"></div>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="frame-name">POLAROID</div>
                             </button>
@@ -131,27 +177,13 @@
                         <div class="frame-colors-section">
                             <h4 class="color-section-title">[ FRAME COLORS ]</h4>
                             <div class="color-grid">
-                                <button class="color-btn active" data-color="#ffffff" style="background-color: #ffffff;">
-                                    <span class="color-name">WHITE</span>
-                                </button>
-                                <button class="color-btn" data-color="#f5f1e8" style="background-color: #f5f1e8;">
-                                    <span class="color-name">CREAM</span>
-                                </button>
-                                <button class="color-btn" data-color="#2a2a2a" style="background-color: #2a2a2a;">
-                                    <span class="color-name">BLACK</span>
-                                </button>
-                                <button class="color-btn" data-color="#d4c4a8" style="background-color: #d4c4a8;">
-                                    <span class="color-name">BEIGE</span>
-                                </button>
-                                <button class="color-btn" data-color="#6d9650" style="background-color: #6d9650;">
-                                    <span class="color-name">SAGE</span>
-                                </button>
-                                <button class="color-btn" data-color="#c19b7a" style="background-color: #c19b7a;">
-                                    <span class="color-name">MOCHA</span>
-                                </button>
-                                <button class="color-btn" data-color="#e8b4cb" style="background-color: #e8b4cb;">
-                                    <span class="color-name">PINK</span>
-                                </button>
+                                <button class="color-btn active" data-color="#ffffff" style="background-color: #ffffff;" title="White"></button>
+                                <button class="color-btn" data-color="#f5f1e8" style="background-color: #f5f1e8;" title="Cream"></button>
+                                <button class="color-btn" data-color="#2a2a2a" style="background-color: #2a2a2a;" title="Black"></button>
+                                <button class="color-btn" data-color="#d4c4a8" style="background-color: #d4c4a8;" title="Beige"></button>
+                                <button class="color-btn" data-color="#6d9650" style="background-color: #6d9650;" title="Sage"></button>
+                                <button class="color-btn" data-color="#c19b7a" style="background-color: #c19b7a;" title="Mocha"></button>
+                                <button class="color-btn" data-color="#e8b4cb" style="background-color: #e8b4cb;" title="Pink"></button>
                             </div>
                         </div>
                         
@@ -172,20 +204,9 @@
                     </div>
 
                 </div>
-            </div>            <!-- Photo Preview Section -->
-            <div class="photo-preview-section">
-                <div class="preview-header">
-                    <h3 class="section-title">[ LATEST PHOTO ]</h3>
-                </div>
-                <div id="photo-preview" class="photo-preview">
-                    <div class="preview-placeholder">
-                        <div class="placeholder-icon">📷</div>
-                        <p>No photo taken yet</p>
-                    </div>
-                </div>
             </div>
-
-        <!-- Loading Overlay -->
+        </div>
+        
         <div id="loading-overlay" class="loading-overlay hidden">
             <div class="loading-content">
                 <div class="loading-icon">📸</div>
