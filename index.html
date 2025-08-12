@@ -65,12 +65,13 @@
                 <!-- Photo Output Section (Download + Photomat) -->
                 <div class="photo-output-section">
                     <!-- Download Section - Sandwich Layout -->
-                    <div class="photo-download-section">
-                        <p class="download-note">Photos save directly to your device</p>
-                        <button id="download-photo" class="btn btn-download" title="Download Photo" disabled>
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <div class="photo-download-section" aria-label="Download Section">
+                        <p class="download-note" style="font-size:1.05em; font-weight:600;">Photos save directly to your device</p>
+                        <button id="download-photo" class="btn btn-download" title="Download Photo" aria-label="Download Photo" disabled>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            <span style="margin-left:0.5em; font-size:1.1em; font-weight:700;">Download</span>
                         </button>
-                        <p class="privacy-note">🔒 Photos are cleared when page is refreshed for your privacy</p>
+                        <p class="privacy-note" style="margin-top:0.5em;">🔒 Photos are cleared when page is refreshed for your privacy</p>
                     </div>
 
                     <!-- Photomat Section - Fixed Layout -->
